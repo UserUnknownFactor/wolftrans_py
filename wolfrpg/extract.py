@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys, os, glob, re
 from wolfrpg import commands, maps, databases, gamedats, common_events,route
-from wolfrpg.service_fn import write_csv_list
+from wolfrpg.service_fn import write_csv_list, read_csv_dict
 from ruamel.yaml import YAML # NOTE: for debug and string search purposes
+if sys.version_info < (3, 9):
+    print("This app must run using Python 3.9+")
+    sys.exit(2)
 
 DUMP_YAML = True
 yaml=YAML()
@@ -81,24 +84,32 @@ STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
 STRINGS_DB_POSTFIX = "_" + STRINGS_NAME + ".csv"
 ATTRIBUTES_DB_POSTFIX = "_" + ATTRIBUTES_NAME + ".csv"
-REPLACEMENT_TAGS_RE = r'(?:「|」|(?:\\[A-Za-z\d]+\[\d+\]|\\[A-Za-z\d<>]+))'
+REPLACEMENT_TAGS_RE = r'(?:「|」|(?:(?:\\[-_%A-Za-z\d]+\[[\d:-_]+\]){1,}|\\[A-Za-z\d<>]+))'
 
 def search_resource(path, name):
     files = glob.glob(os.path.join(path, "**", name), recursive = True)
     return files if len(files) else []
 
 def is_translatable(text):
-    return text and "\u25A0" != text
+    return len(text) and "\u25A0" != text
+    
+def extract_previous(filename, textarr):
+    old = read_csv_dict(filename.replace('.csv', '.old'))
+    if not len(old): return
+    for i, a in enumerate(textarr):
+        if a[0] in old:
+            textarr[i][1] = old[a[0]]
+    return textarr
 
 def attributes_of_command(command):
     if isinstance(command, commands.Choices):
         return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
     elif isinstance(command, commands.Database):
-        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+        texts = [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+        texts += [i.replace('\r\n', '\n') for i in command.string_args if is_translatable(i)]
+        return texts
     elif isinstance(command, commands.StringCondition):
         return [i.replace('\r\n', '\n') for i in command.string_args if is_translatable(i)]
-    elif isinstance(command, commands.SetString):
-        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
     elif isinstance(command, commands.Picture):
         if command.ptype == 'text':
             return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
@@ -106,6 +117,8 @@ def attributes_of_command(command):
 
 def strings_of_command(command):
     if isinstance(command, commands.Message):
+        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+    elif isinstance(command, commands.SetString):
         return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
     return []
 
@@ -124,7 +137,9 @@ def remove_ext(name):
 
 def write_translations(name, attrs, strs):
     name = remove_ext(name)
+    extract_previous(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX), attrs)
     write_csv_list(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX), attrs)
+    extract_previous(make_postfixed_name(name, STRINGS_DB_POSTFIX), strs)
     write_csv_list(make_postfixed_name(name, STRINGS_DB_POSTFIX), strs)
 
 def search_tags(arr, re_tags=REPLACEMENT_TAGS_RE):
@@ -150,16 +165,16 @@ def main():
     #maps_cache = dict()
     for map_name in map_names:
         print('Extracting',os.path.basename(map_name) +'...')
-        translatable_attrs_set = set()
+        translatable_attrs_set = dict()
         translatable_strings = []
         mp = maps.Map(map_name)
         #maps_cache[map_name] = mp
         for event in mp.events:
             for page in event.pages:
                 for i, command in enumerate(page.commands):
-                    a = attributes_of_command(command)
+                    a = dict.fromkeys(attributes_of_command(command))
                     if len(a):
-                        translatable_attrs_set = translatable_attrs_set.union(a)
+                        translatable_attrs_set = translatable_attrs_set | a
                     s = strings_of_command(command)
                     if len(s):
                         translatable_strings += [make_csv_field(strn, command) for strn in s]
@@ -173,14 +188,14 @@ def main():
     if len(commonevents_name):
         commonevents_name = commonevents_name[0]
         ce = common_events.CommonEvents(commonevents_name)
-        translatable_attrs_set = set()
+        translatable_attrs_set = dict()
         translatable_strings = []
         print('Extracting',os.path.basename(commonevents_name) +'...')
         for event in ce.events:
             for i, command in enumerate(event.commands):
-                a = attributes_of_command(command)
+                a = dict.fromkeys(attributes_of_command(command))
                 if len(a):
-                    translatable_attrs_set = translatable_attrs_set.union(a)
+                    translatable_attrs_set = translatable_attrs_set | a
                 s = strings_of_command(command)
                 if len(s):
                     translatable_strings += [make_csv_field(strn, command) for strn in s]
@@ -201,6 +216,7 @@ def main():
                 for l in d.each_translatable():
                     if len(l) and len(l[0]):
                         translatable.append([l[0].replace('\r\n', '\n'), ''])#, f"DATABASE@{t.data.index}"])
+        extract_previous(os.path.join(os.path.dirname(db_name), db_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
         write_csv_list(os.path.join(os.path.dirname(db_name), db_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
         tags += search_tags(translatable)
         if DUMP_YAML:
@@ -220,9 +236,10 @@ def main():
         if gd.subfonts:
             translatable += [[font, '', 'SUBFONT'] for font in gd.subfonts if font]
         dat_name_only = remove_ext(os.path.basename(dat_name))
+        extract_previous(os.path.join(os.path.dirname(dat_name), dat_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
         write_csv_list(os.path.join(os.path.dirname(dat_name), dat_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
 
-        tags = [[t, "a0%d_tg," % i] for i, t in enumerate(set(tags))]
+        tags = [[t, "a0%dtg," % i] for i, t in enumerate(set(tags))]
         tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))
         write_csv_list(os.path.join(os.getcwd(), 'replacement_tags.csv'), tags)
 

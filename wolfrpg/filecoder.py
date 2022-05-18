@@ -66,7 +66,7 @@ class FileCoder(object):
     # Read #
     def read(self, size = None):
         if size and size > 1024 * 1024 * 1024:
-            raise Exception(f"size = {size} is too big to read")
+            raise Exception(f"file of size = {size} is too big to read")
         if size:
             return self.io.read(size)
         else:
@@ -85,7 +85,7 @@ class FileCoder(object):
         if size <= 0:
             raise Exception(f"got a string of size {size} <= 0")
         if size > 65000:
-            raise Exception(f"the string of size {size} is impossible")
+            raise Exception(f"the string of size {size} is improbable")
         _bstr = b''
         if size > 1:
             _bstr = self.read(size - 1)
@@ -100,7 +100,8 @@ class FileCoder(object):
             try:
                 _str = _bstr.decode('cp932')
             except:
-                raise Exception(f"bad string encoding for {encoding}/cp932")
+                print(f"bad string encoding for {encoding}/cp932: {_bstr}" )
+                return _bstr.decode('unicode-escape')
         return _str
 
     def read_byte_array(self):

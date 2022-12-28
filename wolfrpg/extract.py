@@ -8,6 +8,7 @@ if sys.version_info < (3, 9):
     sys.exit(2)
 
 DUMP_YAML = True
+MODE_SETSTRING_AS_STRING = True
 yaml=YAML()
 yaml.register_class(maps.Map)
 yaml.register_class(maps.Map.Event)
@@ -114,12 +115,14 @@ def attributes_of_command(command):
     elif isinstance(command, commands.Picture):
         if command.ptype == 'text':
             return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
-    elif isinstance(command, commands.SetString):
+    elif not MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
         return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
     return []
 
 def strings_of_command(command):
     if isinstance(command, commands.Message):
+        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+    elif MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
         return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
     return []
 

@@ -4,6 +4,7 @@ from wolfrpg import commands, maps, databases, gamedats, common_events
 from wolfrpg.service_fn import read_csv_list, print_progress
 #from ruamel import yaml # NOTE: for debug and string search purposes
 
+MODE_SETSTRING_AS_STRING = True
 STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
 STRINGS_DB_POSTFIX = "_" + STRINGS_NAME + ".csv"
@@ -42,7 +43,7 @@ def translate_attribute_of_command(command, value):
             if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
                 command.text = normalize_n(value[1])
                 is_translated = True
-    elif isinstance(command, commands.SetString):
+    elif not MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
         if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
             command.text = normalize_n(value[1])
             is_translated = True
@@ -51,6 +52,10 @@ def translate_attribute_of_command(command, value):
 def translate_string_of_command(command, value):
     is_translated = False
     if isinstance(command, commands.Message):
+        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
+            command.text = normalize_n(value[1])
+            is_translated = True
+    elif MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
         if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
             command.text = normalize_n(value[1])
             is_translated = True

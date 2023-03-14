@@ -8,7 +8,10 @@ class FileCoder(object):
     DECRYPT_INTERVALS = [1, 2, 5]
 
     packer_u1 = struct.Struct('B')
-    packer_u4 = struct.Struct('<I') # Little-Endian
+    packer_u4le = struct.Struct('<I') # Little-Endian
+    packer_u4be = struct.Struct('>I') # Big-Endian
+    packer_u2le = struct.Struct('<H') # Little-Endian
+    packer_u2be = struct.Struct('>H') # Big-Endian
     packer_str = struct.Struct('s')
 
     ##############
@@ -18,6 +21,8 @@ class FileCoder(object):
         self.crypt_header = crypt_header
         self.filename = filename
         self.io.seek(0)
+        self.is_be = False
+        self.is_utf8 = True
 
     def __enter__(self):
         return self
@@ -62,13 +67,25 @@ class FileCoder(object):
 
         return coder
 
+    @staticmethod
+    def print_stack():
+        import traceback
+        for line in traceback.format_stack()[:-1]:
+            print(line.strip())
+
     ########
     # Read #
     def read(self, size = None):
+        # sanity check
         if size and size > 1024 * 1024 * 1024:
-            raise Exception(f"file of size = {size} is too big to read")
+            self.print_stack()
+            raise Exception(f"data of size = {size} is too big to read")
         if size:
-            return self.io.read(size)
+            data = self.io.read(size)
+            if len(data) != size:
+                print(f"couldn't read required data of size {size} at\n")
+                self.print_stack()
+            return data
         else:
             return self.io.read()
 
@@ -78,19 +95,32 @@ class FileCoder(object):
 
     def read_u4(self):
         data = self.read(4)
-        return self.packer_u4.unpack(data)[0]
+        if self.is_be:
+            return self.packer_u4be.unpack(data)[0]
+        else:
+            return self.packer_u4le.unpack(data)[0]
+
+    def read_u2(self):
+        data = self.read(2)
+        if self.is_be:
+            return self.packer_u2be.unpack(data)[0]
+        else:
+            return self.packer_u2le.unpack(data)[0]
 
     def read_string(self, encoding='utf-8'):
         size = self.read_u4()
         if size <= 0:
+            self.print_stack()
             raise Exception(f"got a string of size {size} <= 0")
-        if size > 65000:
+        if size > 30000:
+            self.print_stack()
             raise Exception(f"the string of size {size} is improbable")
         _bstr = b''
         if size > 1:
             _bstr = self.read(size - 1)
         _last = self.read_u1()
         if _last != 0:
+            self.print_stack()
             raise Exception("read string is not null-terminated")
 
         _str = None
@@ -98,27 +128,36 @@ class FileCoder(object):
             _str = _bstr.decode(encoding)
         except:
             try:
-                _str = _bstr.decode('cp932')
+                if not self.is_utf8:
+                    _str = _bstr.decode('cp932')
+                else:
+                    _str = _bstr.decode('utf-8')
             except:
+                self.print_stack()
                 print(f"bad string encoding for {encoding}/cp932: {_bstr}" )
                 return _bstr.decode('unicode-escape')
         return _str
 
-    def read_byte_array(self):
-        arr_len = self.read_u4()
+    def read_byte_array(self, arr_len = None):
+        if arr_len is None:
+            arr_len = self.read_u4()
         return [self.read_u1() for _ in range(arr_len)]
 
-    def read_int_array(self):
-        arr_len = self.read_u4()
+    def read_int_array(self, arr_len = None):
+        if arr_len is None:
+            arr_len = self.read_u4()
         return [self.read_u4() for _ in range(arr_len)]
 
-    def read_string_array(self):
-        arr_len = self.read_u4()
-        return [self.read_u4() for _ in range(arr_len)]
+    def read_string_array(self, arr_len = None):
+        if arr_len is None:
+            arr_len = self.read_u4()
+        return [self.read_string() for _ in range(arr_len)]
 
     def verify(self, expected):
         have = self.read(len(expected))
         if have != expected:
+            self.io.seek(-len(expected), SEEK_CUR)
+            #self.print_stack()
             raise Exception(f"could not verify magic data (expecting #{expected}, got #{have})")
         return True
 
@@ -159,13 +198,25 @@ class FileCoder(object):
     def write_u1(self, data):
         self.write(self.packer_u1.pack(data))
 
+    def write_u2(self, data):
+        if self.is_be:
+            self.write(self.packer_u2be.pack(data))
+        else:
+            self.write(self.packer_u2le.pack(data))
+
     def write_u4(self, data):
-        self.write(self.packer_u4.pack(data))
+        if self.is_be:
+            self.write(self.packer_u4be.pack(data))
+        else:
+            self.write(self.packer_u4le.pack(data))
 
     def write_string(self, data):
         _str = None
         try:
-            _str = data.encode('cp932')
+            if not self.is_utf8:
+                _str = data.encode('cp932')
+            else:
+                _str = data.encode('utf-8')
         except:
             try:
                 _str = data.encode('utf-8')

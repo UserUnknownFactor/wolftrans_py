@@ -15,7 +15,8 @@ class GameDat():
     SEED_INDICES = [0, 8, 6]
     #XSEED_INDICES = [3, 4, 5]
 
-    MAGIC_NUMBER = bytes([0x57, 0x00, 0x00, 0x4f, 0x4c, 0x00, 0x46, 0x4d, 0x00])
+    MAGIC_NUMBER2 = b'W\x00\x00OL\x00FM\x00'
+    MAGIC_NUMBER3 = b'W\x00\x00OL\x00FMU'
     MAGIC_STRING = "0000-0000"
 
     @property
@@ -24,19 +25,25 @@ class GameDat():
 
     def __init__(self, filename):
 
-        with FileCoder.open(filename, 'r', GameDat.SEED_INDICES) as coder:
+        with FileCoder.open(filename, 'r', self.SEED_INDICES) as coder:
             if coder.encrypted:
                 self.crypt_header = coder.crypt_header
             else:
                 self.crypt_header = None
-                coder.verify(GameDat.MAGIC_NUMBER)
+                try:
+                    coder.verify(self.MAGIC_NUMBER2)
+                    self.MAGIC_NUMBER = self.MAGIC_NUMBER2
+                except:
+                    coder.verify(self.MAGIC_NUMBER3)
+                    self.MAGIC_NUMBER = self.MAGIC_NUMBER3
+                    coder.is_utf8 = True
 
             #TODO what is most of the junk in this file?
             self.unknown1 = coder.read_byte_array()
             self.file_version = coder.read_u4()
             self.title = coder.read_string()
             magic_string = coder.read_string()
-            if magic_string != GameDat.MAGIC_STRING:
+            if magic_string != self.MAGIC_STRING:
                 raise Exception(f"magic string is invalid (got #{magic_string})")
 
             self.unknown2 = coder.read_byte_array()
@@ -58,14 +65,16 @@ class GameDat():
 
 
     def write(self, filename):
-        with FileCoder.open(filename, 'w', GameDat.SEED_INDICES, self.crypt_header) as coder:
+        with FileCoder.open(filename, 'w', self.SEED_INDICES, self.crypt_header) as coder:
             if not self.encrypted:
-                coder.write(GameDat.MAGIC_NUMBER)
+                coder.write(self.MAGIC_NUMBER)
+            if self.MAGIC_NUMBER == self.MAGIC_NUMBER3:
+                coder.is_utf8 = True
 
             coder.write_byte_array(self.unknown1)
             coder.write_u4(self.file_version)
             coder.write_string(self.title)
-            coder.write_string(GameDat.MAGIC_STRING)
+            coder.write_string(self.MAGIC_STRING)
             coder.write_byte_array(self.unknown2)
             coder.write_string(self.font)
             for subfont in self.subfonts:

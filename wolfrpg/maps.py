@@ -15,27 +15,41 @@ class Map():
     #DEBUG
     #attr_reader :filename
 
-    MAP_MAGIC = bytes([
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x57, 0x4F, 0x4C, 0x46, 0x4D, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-        0x64, 0x00, 0x00, 0x00,
-        0x65,
-        0x05, 0x00, 0x00, 0x00,
-        0x82, 0xC8, 0x82, 0xB5, 0x00,
-    ])
+    MAP_MAGIC_JP2 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00\x00\x00\x00\x00d\x00\x00\x00e\x05\x00\x00\x00\x82\xc8\x82\xb5\x00'
+    MAP_MAGIC_JP3 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00U\x00\x00\x00d\x00\x00\x00f\x07\x00\x00\x00\xe3\x81\xaa\xe3\x81'
+    MAP_MAGIC_JP31 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00U\x00\x00\x00d\x00\x00\x00f\x01\x00\x00\x00\x00\x01\x00\x00\x00'
+    MAP_MAGIC_EN2 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00\x00\x00\x00\x00\x64\x00\x00\x00\x65\x03,\x00\x00\x00\x4e\x6f\x00'
 
     def __init__(self, filename):
         self.filename = filename
+        self.wolfversion = 2
+
         with FileCoder.open(filename, 'r') as coder:
-            coder.verify(self.MAP_MAGIC)
+            try:
+                coder.verify(self.MAP_MAGIC_JP2)
+                self.MAP_MAGIC = self.MAP_MAGIC_JP2
+                coder.is_utf8 = False
+            except Exception as e:
+                try:
+                    coder.verify(self.MAP_MAGIC_JP3)
+                    self.MAP_MAGIC = self.MAP_MAGIC_JP3
+                    self.wolfversion = 3
+                    coder.is_utf8 = True
+                except:
+                    coder.verify(self.MAP_MAGIC_JP31)
+                    self.MAP_MAGIC = self.MAP_MAGIC_JP31
 
             self.tileset_id = coder.read_u4()
+            if self.wolfversion == 3:
+                self.unk1 = coder.read_u2()
 
             # Read basic data
             self.width = coder.read_u4()
             self.height = coder.read_u4()
-            event_count = coder.read_u4()
+            event_count = 0
+            if (self.MAP_MAGIC != self.MAP_MAGIC_JP31):
+                event_count = coder.read_u4()
+            print(f'{self.width} x {self.height}; events: {event_count}')
 
             # Read tiles
             # TODO: interpret this data
@@ -54,7 +68,6 @@ class Map():
 
             if indicator != 0x66:
                 raise Exception(f"unexpected event indicator found: #{hex(indicator)}")
-
             if not coder.eof:
                 raise Exception(f"file is not fully parsed")
 
@@ -62,6 +75,9 @@ class Map():
         with FileCoder.open(filename, 'w') as coder:
             coder.write(self.MAP_MAGIC)
             coder.write_u4(self.tileset_id)
+            if self.wolfversion == 3:
+                coder.write_u2(self.unk1)
+                coder.is_utf8 = True
             coder.write_u4(self.width)
             coder.write_u4(self.height)
             coder.write_u4(len(self.events))

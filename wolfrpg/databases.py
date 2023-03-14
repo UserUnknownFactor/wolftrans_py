@@ -3,7 +3,9 @@ from .filecoder import FileCoder
 
 class Database():
     DAT_SEED_INDICES = [0, 3, 9]
-    DATABASE_MAGIC = bytes([0x57, 0x00, 0x00, 0x4F, 0x4C, 0x00, 0x46, 0x4D, 0x00, 0xC1])
+    DATABASE_MAGIC2 = b'W\x00\x00OL\x00FM\x00\xc1'
+    DATABASE_MAGIC_CDB = b'W\x00\x00OLUFM\x00\xc2'
+    DATABASE_MAGIC_G = b'W\x00\x00OL\x00FMU'
 
     def __init__(self, project_filename, dat_filename):
         with FileCoder.open(project_filename, 'r') as coder:
@@ -16,7 +18,20 @@ class Database():
                 self.unknown_encrypted_1 = coder.read_u1()
             else:
                 self.crypt_header = None
-                coder.verify(self.DATABASE_MAGIC)
+                try:
+                    coder.verify(self.DATABASE_MAGIC2)
+                    self.DATABASE_MAGIC = self.DATABASE_MAGIC2
+                    coder.is_utf8 = False
+                except:
+                    try:
+                        coder.verify(self.DATABASE_MAGIC_CDB)
+                        self.DATABASE_MAGIC = self.DATABASE_MAGIC_CDB
+                        coder.is_utf8 = True
+                    except:
+                        coder.verify(self.DATABASE_MAGIC_G)
+                        self.DATABASE_MAGIC = self.DATABASE_MAGIC_G
+                        coder.is_utf8 = True
+
 
             num_types = coder.read_u4()
             if num_types != len(self.types):
@@ -24,9 +39,9 @@ class Database():
                                 f"(#{len(self.types)} vs. #{num_types})")
 
             [t.read_dat(coder) for t in self.types]
-            terminator = coder.read_u1()
-            if terminator != 0xC1: # 193
-                print(f"warning: no C1 terminator at the of '#{dat_filename}', got {hex(terminator)} instead")
+            self.last_terminator = coder.read_u1()
+            if self.last_terminator != 0xC1 and self.last_terminator != 0xC2: # 193
+                print(f"warning: no C1|C2 terminator at the of '#{dat_filename}', got {hex(self.last_terminator)} instead")
 
     @property
     def encrypted(self):
@@ -44,14 +59,15 @@ class Database():
                 coder.write(self.DATABASE_MAGIC)
             coder.write_u4(len(self.types))
             [t.write_dat(coder) for t in self.types]
-            coder.write_u1(0xC1)
+            coder.write_u1(self.last_terminator)
 
-    def grep(self, needle):
-        for t, type_index in enumerate(self.types):
-            for datum, datum_index in enumerate(t.data):
+    def grep(self, needle=''):
+        for type_index, t in enumerate(self.types):
+            if not hasattr(t, 'data'): continue
+            for datum_index, datum in enumerate(t.data):
                 for value, field in datum.each_translatable():
                     if needle not in value: continue
-                    print("DB:[#{type_index}]#{type.name}/[#{datum_index}]#{datum.name}/[#{field.index}]#{field.name}")
+                    print(f"DB:[#{type_index}]#{t.name}/[#{datum_index}]#{datum.name}/[#{field.index}]#{field.name}")
                     print( "\t" + value)
 
 
@@ -62,7 +78,7 @@ class Database():
         #attr_accessor :description
         #attr_accessor :unknown1
 
-        D_TYPE_SEPARATOR = bytes([ 0xFE, 0xFF, 0xFF, 0xFF])
+        D_TYPE_SEPARATOR = b'\xFE\xFF\xFF\xFF'
 
         # Initialize from project file IO
         def __init__(self, coder):
@@ -259,7 +275,7 @@ class Database():
 
         def set_field(self, key, value):
             if not isinstance(value, str):
-                raise Exception(f"Data.set_field() takes a string, got #{value.__class__}")
+                raise Exception(f"Data.set_field() takes a str, got #{value.__class__}")
             if isinstance(key, Database.Field):
                 if key.is_string:
                     self.string_values[key.index] = value
@@ -268,11 +284,11 @@ class Database():
             elif isinstance(key, int):
                 self.__dict__[self.fields[key]] = value
             else:
-                raise Exception(f"Data.set_field()takes a Field, got #{key.__class__}")
+                raise Exception(f"Data.set_field() takes a Field, got #{key.__class__}")
 
-        def each_translatable(self):
+        def each_translatable(self, all = False):
             for field in self.fields:
-                if not (field.is_string and field.ftype == 0): continue
+                if (not (field.is_string and field.ftype == 0)): continue
                 value = self.get_field(field)
                 if not value: continue
                 #if not value or ("\n" in value): continue

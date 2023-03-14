@@ -37,7 +37,7 @@ CID_TO_CLASS = {
     173: 'EraseEvent',
     174: 'ReturnToTitle',
     175: 'EndGame',
-    #176: 'StartLoop', # wtf?
+    176: 'StartNonPic', # wtf?
     177: 'StopNonPic',
     178: 'ResumeNonPic',
     179: 'LoopTimes',
@@ -145,7 +145,7 @@ class Choices(Command):
 class Comment(Command):
     @property
     def text(self):
-        return self.string_args[0]
+        return self.string_args
 
 class ForceStopMessage(Command):
     pass
@@ -177,7 +177,8 @@ class SetString(Command):
 
     @text.setter
     def text(self, value):
-        self.string_args[0] = value
+        if len(self.string_args) > 0:
+            self.string_args[0] = value
 
 class InputKey(Command):
     pass
@@ -283,6 +284,9 @@ class EndGame(Command):
 class LoopToStart(Command):
     pass
 
+class StartNonPic(Command):
+    pass
+
 class StopNonPic(Command):
     pass
 
@@ -322,7 +326,9 @@ class WaitForMove(Command):
     pass
 
 class CommonEvent(Command):
-    pass
+    @property
+    def text(self):
+        return self.string_args
 
 class CommonEventReserve(Command):
     pass
@@ -386,7 +392,9 @@ class Effect(Command):
     pass
 
 class CommonEventByName(Command):
-    pass
+    @property
+    def text(self):
+        return self.string_args
 
 class ChoiceCase(Command):
     pass

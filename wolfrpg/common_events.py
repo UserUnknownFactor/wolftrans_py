@@ -3,22 +3,35 @@ from .filecoder import FileCoder
 from .commands import Command
 
 class CommonEvents():
-    COMMON_MAGIC = bytes([0x00, 0x57, 0x00, 0x00, 0x4F, 0x4C, 0x00, 0x46, 0x43, 0x00, 0x8F])
+    COMMON_MAGIC2 = b'\x00W\x00\x00OL\x00FC\x00\x8f'
+    COMMON_MAGIC3 = b'\x00W\x00\x00OLUFC\x00\x90'
 
     def __init__(self, filename):
         self.events = []
+        self.wolfversion = 2
         with FileCoder.open(filename, 'r') as coder:
-            coder.verify(self.COMMON_MAGIC)
+            try:
+                coder.verify(self.COMMON_MAGIC2)
+                self.COMMON_MAGIC = self.COMMON_MAGIC2
+                coder.is_utf8 = False
+            except:
+                coder.verify(self.COMMON_MAGIC3)
+                self.COMMON_MAGIC = self.COMMON_MAGIC3
+                self.wolfversion = 3
+                coder.is_utf8 = True
+
             events_len = coder.read_u4()
+            print('events:', events_len)
             self.events = [None] * events_len
-            for _ in range(events_len):
+            for i in range(events_len):
+                #print(i,'of',events_len)
                 event = self.Event(coder)
                 assert(event.id < events_len)
                 self.events[event.id] = event
 
-            terminator = coder.read_u1()
-            if terminator != 0x8F:
-                raise Exception(f"CommonEvents terminator not 0x8F (got 0x#{hex(terminator)})")
+            self.last_terminator = coder.read_u1()
+            if self.last_terminator != 0x8F and self.last_terminator != 0x90:
+                raise Exception(f"CommonEvents terminator not 0x8F|0x90 (got {hex(terminator)})")
 
     def write(self, filename):
         with FileCoder.open(filename, 'w') as coder:
@@ -26,18 +39,19 @@ class CommonEvents():
             coder.write_u4(len(self.events))
             for event in self.events:
                 event.write(coder)
-            coder.write_u1(0x8F)
+            coder.write_u1(self.last_terminator)
 
     def grep(self, needle):
         pass
 
     class Event():
-        EVENT_MAGIC = bytes([0x0A, 0x00, 0x00, 0x00])
+        EVENT_MAGIC = b'\x0A\x00\x00\x00'
+        EVENT_MAGIC3 = b'\x0B\x00\x00\x00'
 
         def __init__(self, coder):
             indicator = coder.read_u1()
             if indicator != 0x8E: # 142
-                raise Exception(f"CommonEvent header indicator not 0x8E (got 0x#{hex(indicator)})")
+                raise Exception(f"CommonEvent header indicator not 0x8E (got {hex(indicator)})")
 
             self.id = coder.read_u4()
             self.unknown1 = coder.read_u4()
@@ -51,32 +65,33 @@ class CommonEvents():
             self.description = coder.read_string()
             indicator = coder.read_u1()
             if indicator != 0x8F:
-                raise Exception(f"CommonEvent data indicator not 0x8F (got 0x#{hex(indicator)})")
+                raise Exception(f"CommonEvent data indicator not 0x8F (got {hex(indicator)})")
+
+            self.unknown31 = None
+            try:
+                coder.verify(self.EVENT_MAGIC)
+                self.unknown3 = coder.read_string_array(10)
+            except:
+                coder.verify(self.EVENT_MAGIC3)
+                self.unknown3 = coder.read_string_array(10)
+                self.unknown31 = coder.read_u4()
+                self.unknown32 = coder.read_u1()
 
             coder.verify(self.EVENT_MAGIC)
-            self.unknown3 = [coder.read_string() for _ in range(10)]
+            self.unknown4 = coder.read_byte_array(10)
 
             coder.verify(self.EVENT_MAGIC)
-            self.unknown4 = [coder.read_u1() for _ in range(10)]
+            self.unknown5 = [coder.read_string_array() for _ in range(10)]
 
             coder.verify(self.EVENT_MAGIC)
-            def read_substrings():
-                strs_len = coder.read_u4()
-                return [coder.read_string() for _ in range(strs_len)]
-            self.unknown5 = [read_substrings() for _ in range(10)]
-
-            coder.verify(self.EVENT_MAGIC)
-            def read_subarray():
-                ints_len = coder.read_u4()
-                return [coder.read_u4() for _ in range(ints_len)]
-            self.unknown6 = [read_subarray() for _ in range(10)]
+            self.unknown6 = [coder.read_int_array() for _ in range(10)]
 
             self.unknown7 = coder.read(0x1D)
             self.unknown8 = [coder.read_string() for _ in range(100)]
 
             indicator = coder.read_u1()
             if indicator != 0x91: # 145
-                raise Exception(f"expected 0x91, got 0x#{hex(indicator)}")
+                raise Exception(f"expected 0x91, got {hex(indicator)}")
 
             self.unknown9 = coder.read_string()
             indicator = coder.read_u1()
@@ -85,7 +100,7 @@ class CommonEvents():
 
             self._is_0x92 = False
             if indicator != 0x92: # 146
-                raise Exception(f"expected 0x92, got 0x#{hex(indicator)}")
+                raise Exception(f"expected 0x92, got {hex(indicator)}")
             else:
                 self._is_0x92 = True
 
@@ -93,7 +108,7 @@ class CommonEvents():
             self.unknown12 = coder.read_u4()
             indicator = coder.read_u1()
             if indicator != 0x92: # 146
-                raise Exception(f"expected 0x92, got 0x#{hex(indicator)}")
+                raise Exception(f"expected 0x92, got {hex(indicator)}")
 
 
         def write(self, coder):
@@ -108,10 +123,18 @@ class CommonEvents():
 
             coder.write_string(self.unknown11)
             coder.write_string(self.description)
+
             coder.write_u1(0x8F)
-            coder.write(self.EVENT_MAGIC)
+            if self.unknown31 is None:
+                coder.write(self.EVENT_MAGIC)
+            else:
+                coder.write(self.EVENT_MAGIC3)
             for s in self.unknown3:
                 coder.write_string(s)
+
+            if self.unknown31 is not None:
+                coder.write_u4(self.unknown31)
+                coder.write_u1(self.unknown32)
 
             coder.write(self.EVENT_MAGIC)
             for i in self.unknown4:

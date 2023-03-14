@@ -4,7 +4,9 @@ from wolfrpg import commands, maps, databases, gamedats, common_events
 from wolfrpg.service_fn import read_csv_list, print_progress
 #from ruamel import yaml # NOTE: for debug and string search purposes
 
-MODE_SETSTRING_AS_STRING = True
+MODE_SETSTRING_AS_STRING = any(a == "-s" for a in sys.argv[1:]) #True
+MODE_ENABLE_CE_PARAMS = True
+
 STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
 STRINGS_DB_POSTFIX = "_" + STRINGS_NAME + ".csv"
@@ -21,6 +23,16 @@ def normalize_n(line, into_csv_n = False):
 def translate_attribute_of_command(command, value):
     is_translated = False
     if isinstance(command, commands.Choices):
+        for i, line in enumerate(command.text):
+            if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                command.text[i] = normalize_n(value[1])
+                is_translated = True
+    elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEvent):
+        for i, line in enumerate(command.text):
+            if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                command.text[i] = normalize_n(value[1])
+                is_translated = True
+    elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEventByName):
         for i, line in enumerate(command.text):
             if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
                 command.text[i] = normalize_n(value[1])
@@ -111,7 +123,11 @@ def main():
     print("Translating maps...")
     for map_name in map_names:
         print("Translating",map_name,"...")
-        mp = maps.Map(map_name)
+        try:
+            mp = maps.Map(map_name)
+        except Exception as e:
+            print(f'FAILED\n{e}')
+            continue
         #maps_cache[map_name] = mp
         strs = read_string_translations(map_name)
         attrs = read_attribute_translations(map_name)
@@ -174,7 +190,7 @@ def main():
         #with open(remove_ext(db_name) + '.yaml') as f: w.write(yaml.dump(db))
 
     dat_name = dat_name[0]
-    attrs = read_attribute_translations(dat_name)
+    attrs = [] #read_attribute_translations(dat_name)
     if len(attrs):
         print("Translating game dat file...")
         gd = gamedats.GameDat(dat_name)

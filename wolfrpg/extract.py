@@ -8,7 +8,7 @@ if sys.version_info < (3, 9):
     sys.exit(2)
 
 DUMP_YAML = True
-MODE_SETSTRING_AS_STRING = True
+MODE_SETSTRING_AS_STRING = any(a == "-s" for a in sys.argv[1:]) #True
 yaml=YAML()
 yaml.register_class(maps.Map)
 yaml.register_class(maps.Map.Event)
@@ -49,6 +49,7 @@ yaml.register_class(commands.BreakEvent)
 yaml.register_class(commands.EraseEvent)
 yaml.register_class(commands.ReturnToTitle)
 yaml.register_class(commands.EndGame)
+yaml.register_class(commands.StartNonPic)
 yaml.register_class(commands.StopNonPic)
 yaml.register_class(commands.ResumeNonPic)
 yaml.register_class(commands.LoopTimes)
@@ -94,7 +95,7 @@ def search_resource(path, name):
 
 def is_translatable(text):
     return len(text) and "\u25A0" != text
-    
+
 def extract_previous(filename, textarr):
     old = read_csv_dict(filename.replace('.csv', '.old'))
     if not len(old): return
@@ -105,6 +106,10 @@ def extract_previous(filename, textarr):
 
 def attributes_of_command(command):
     if isinstance(command, commands.Choices):
+        return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
+    if isinstance(command, commands.CommonEvent):
+        return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
+    if isinstance(command, commands.CommonEventByName):
         return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
     elif isinstance(command, commands.Database):
         texts = [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
@@ -171,13 +176,17 @@ def main():
     tags = []
 
     #maps_cache = dict()
+    #map_names = []
     for map_name in map_names:
         if os.path.isfile(make_postfixed_name(map_name, ATTRIBUTES_DB_POSTFIX)) or os.path.isfile(make_postfixed_name(map_name, STRINGS_DB_POSTFIX)):
             continue
         print('Extracting',os.path.basename(map_name) +'...')
         translatable_attrs = dict()
         translatable_strings = []
-        mp = maps.Map(map_name)
+        try:
+            mp = maps.Map(map_name)
+        except Exception as e:
+            print(f'FAILED\n{e}')
         #maps_cache[map_name] = mp
         for event in mp.events:
             for page in event.pages:
@@ -199,10 +208,14 @@ def main():
     if len(commonevents_name) and not (
             os.path.isfile(make_postfixed_name(commonevents_name, ATTRIBUTES_DB_POSTFIX)) or (
                 os.path.isfile(make_postfixed_name(commonevents_name, STRINGS_DB_POSTFIX)))):
-        ce = common_events.CommonEvents(commonevents_name)
+        print('Extracting',os.path.basename(commonevents_name) +'...')
+        try:
+            ce = common_events.CommonEvents(commonevents_name)
+        except Exception as e:
+            print(e)
+            sys.exit(2)
         translatable_attrs = dict()
         translatable_strings = []
-        print('Extracting',os.path.basename(commonevents_name) +'...')
         for event in ce.events:
             for i, command in enumerate(event.commands):
                 a = dict.fromkeys(attributes_of_command(command))
@@ -221,9 +234,14 @@ def main():
     for db_name in db_names:
         if os.path.isfile(make_postfixed_name(db_name, ATTRIBUTES_DB_POSTFIX)):
             continue
-        print('Extracting',os.path.basename(db_name) +'...')
+        base_name = os.path.basename(db_name)
+        print('Extracting', base_name + '...')
         db_name_only = remove_ext(os.path.basename(db_name))
-        db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
+        try:
+            db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
+        except Exception as e:
+            print(e)
+            break
         translatable = []
         test_a = set()
         for t in  db.types:
@@ -234,6 +252,7 @@ def main():
                         if item not in test_a:
                             translatable.append([item, ''])#, f"DATABASE@{t.data.index}"])
                             test_a.add(item)
+
         extract_previous(os.path.join(os.path.dirname(db_name), db_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
         write_csv_list(os.path.join(os.path.dirname(db_name), db_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
         tags += search_tags(translatable)
@@ -242,9 +261,13 @@ def main():
 
     if len(dat_name): dat_name = dat_name[0]
     if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX)):
-        gd = gamedats.GameDat(dat_name)
-        translatable = []
         print('Extracting',os.path.basename(dat_name) +'...')
+        try:
+            gd = gamedats.GameDat(dat_name)
+        except Exception as e:
+            print(e)
+            sys.exit(2)
+        translatable = []
         if gd.title:
             translatable.append([gd.title, '', 'TITLE'])
         if gd.version:
@@ -257,9 +280,9 @@ def main():
         extract_previous(os.path.join(os.path.dirname(dat_name), dat_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
         write_csv_list(os.path.join(os.path.dirname(dat_name), dat_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
 
-        tags = [[t, "a0%dtg," % i] for i, t in enumerate(set(tags))]
-        tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))
-        write_csv_list(os.path.join(os.getcwd(), 'replacement_tags.csv'), tags)
+    tags = [[t, "a0%dtg," % i] for i, t in enumerate(set(tags))]
+    tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))
+    write_csv_list(os.path.join(os.getcwd(), 'replacement_tags.csv'), tags)
 
 if __name__ == "__main__":
     main()

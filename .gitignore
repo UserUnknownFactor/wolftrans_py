@@ -4,3 +4,5 @@ translation_out
 Data
 .vscode
 /build
+/*.egg-info
+*.ksy

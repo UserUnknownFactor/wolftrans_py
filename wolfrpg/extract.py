@@ -244,7 +244,7 @@ def main():
             break
         translatable = []
         test_a = set()
-        for t in  db.types:
+        for t in db.types:
             for i, d in enumerate(t.data):
                 for l in d.each_translatable():
                     if len(l) and len(l[0]):

@@ -6,6 +6,8 @@ from .commands import Command
 from .debuging import *
 import os#, re
 
+EXCEPT_NO_EVENTS = True
+
 class Map():
     #attr_reader :tileset_id
     #attr_reader :width
@@ -51,6 +53,8 @@ class Map():
                 event_count = coder.read_u4()
             print(f'{self.width} x {self.height}; events: {event_count}')
 
+            if EXCEPT_NO_EVENTS and event_count == 0:
+                raise Exception("no Events on the map")
             # Read tiles
             # TODO: interpret this data
             tiles_length = self.width * self.height * 3 * 4

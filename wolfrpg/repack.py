@@ -22,55 +22,63 @@ def normalize_n(line, into_csv_n = False):
 
 def translate_attribute_of_command(command, value):
     is_translated = False
-    if isinstance(command, commands.Choices):
-        for i, line in enumerate(command.text):
-            if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                command.text[i] = normalize_n(value[1])
+    try:
+        if isinstance(command, commands.Choices):
+            for i, line in enumerate(command.text):
+                if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                    command.text[i] = normalize_n(value[1])
+                    is_translated = True
+        elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEvent):
+            for i, line in enumerate(command.text):
+                if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                    command.text[i] = normalize_n(value[1])
+                    is_translated = True
+        elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEventByName):
+            for i, line in enumerate(command.text):
+                if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                    command.text[i] = normalize_n(value[1])
+                    is_translated = True
+        elif isinstance(command, commands.Database):
+            if (command.text and (command.text == value[0] or normalize_n(command.text, True) == value[0])) and value[1]:
+                command.text = normalize_n(value[1])
                 is_translated = True
-    elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEvent):
-        for i, line in enumerate(command.text):
-            if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                command.text[i] = normalize_n(value[1])
-                is_translated = True
-    elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEventByName):
-        for i, line in enumerate(command.text):
-            if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                command.text[i] = normalize_n(value[1])
-                is_translated = True
-    elif isinstance(command, commands.Database):
-        if (command.text and (command.text == value[0] or normalize_n(command.text, True) == value[0])) and value[1]:
-            command.text = normalize_n(value[1])
-            is_translated = True
-        for i, line in enumerate(command.string_args):
-            if (command.string_args[i] and (line == value[0] or normalize_n(line, True) == value[0])) and value[1]:
-                command.string_args[i] = normalize_n(value[1])
-                is_translated = True
-    elif isinstance(command, commands.StringCondition):
-        for i, line in enumerate(command.string_args):
-            if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                command.string_args[i] = normalize_n(value[1])
-                is_translated = True
-    elif isinstance(command, commands.Picture):
-        if command.ptype == 'text':
+            for i, line in enumerate(command.string_args):
+                if (command.string_args[i] and (line == value[0] or normalize_n(line, True) == value[0])) and value[1]:
+                    command.string_args[i] = normalize_n(value[1])
+                    is_translated = True
+        elif isinstance(command, commands.StringCondition):
+            for i, line in enumerate(command.string_args):
+                if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                    command.string_args[i] = normalize_n(value[1])
+                    is_translated = True
+        elif isinstance(command, commands.Picture):
+            if command.ptype == 'text':
+                if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
+                    command.text = normalize_n(value[1])
+                    is_translated = True
+        elif not MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
             if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
                 command.text = normalize_n(value[1])
                 is_translated = True
-    elif not MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
-        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-            command.text = normalize_n(value[1])
-            is_translated = True
+    except Exception as e:
+        print(command.text.encode("unicode-escape"))
+        raise e
     return is_translated
 
 def translate_string_of_command(command, value):
     is_translated = False
-    if isinstance(command, commands.Message):
-        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-            command.text = normalize_n(value[1])
-            is_translated = True
-    elif MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
-        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-            command.text = normalize_n(value[1])
-            is_translated = True
+    try:
+        if isinstance(command, commands.Message):
+            if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
+                command.text = normalize_n(value[1])
+                is_translated = True
+        elif MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
+            if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
+                command.text = normalize_n(value[1])
+                is_translated = True
+    except Exception as e:
+        print(command.text.encode("unicode-escape"))
+        raise e
     return is_translated
 
 def get_context(command):
@@ -126,7 +134,7 @@ def main():
         try:
             mp = maps.Map(map_name)
         except Exception as e:
-            print(f'FAILED\n{e}')
+            print(f'FAILED: {e}')
             continue
         #maps_cache[map_name] = mp
         strs = read_string_translations(map_name)
@@ -178,7 +186,7 @@ def main():
         db_name_only = remove_ext(os.path.basename(db_name))
         db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
         attrs = read_attribute_translations(db_name)
-        for t in  db.types:
+        for t in db.types:
             for i, d in enumerate(t.data):
                 for j, l in enumerate(d.each_translatable()):
                     for at in attrs:

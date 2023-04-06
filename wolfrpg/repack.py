@@ -6,6 +6,7 @@ from wolfrpg.service_fn import read_csv_list, print_progress
 
 MODE_SETSTRING_AS_STRING = any(a == "-s" for a in sys.argv[1:]) #True
 MODE_ENABLE_CE_PARAMS = True
+MODE_REPACK_DB_NAMES = True
 
 STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
@@ -188,6 +189,11 @@ def main():
         attrs = read_attribute_translations(db_name)
         for t in db.types:
             for i, d in enumerate(t.data):
+                if MODE_REPACK_DB_NAMES and d.name:
+                    for at in attrs:
+                        if (d.name == at[0] or normalize_n(d.name, True) == at[0]) and at[1]:
+                            #print(t.data[i], d.name, at[1])
+                            t.data[i].name = at[1].replace('\r\n', '\n').replace('\n','\r\n')
                 for j, l in enumerate(d.each_translatable()):
                     for at in attrs:
                         if (l[0] == at[0] or normalize_n(l[0], True) == at[0]) and at[1]:

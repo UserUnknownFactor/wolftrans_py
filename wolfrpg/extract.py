@@ -9,6 +9,8 @@ if sys.version_info < (3, 9):
 
 DUMP_YAML = True
 MODE_SETSTRING_AS_STRING = any(a == "-s" for a in sys.argv[1:]) #True
+MODE_EXTRACT_DB_NAMES = True
+
 yaml=YAML()
 yaml.register_class(maps.Map)
 yaml.register_class(maps.Map.Event)
@@ -246,6 +248,9 @@ def main():
         test_a = set()
         for t in db.types:
             for i, d in enumerate(t.data):
+                if MODE_EXTRACT_DB_NAMES and d.name and d.name not in test_a:
+                    translatable.append([d.name, ''])
+                    test_a.add(d.name)
                 for l in d.each_translatable():
                     if len(l) and len(l[0]):
                         item = l[0].replace('\r\n', '\n')

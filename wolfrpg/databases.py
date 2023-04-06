@@ -289,9 +289,11 @@ class Database():
         def each_translatable(self, all = False):
             for field in self.fields:
                 if (not (field.is_string and field.ftype == 0)): continue
+                #if field.name:
+                #    yield (field.name, field)
                 value = self.get_field(field)
-                if not value: continue
-                #if not value or ("\n" in value): continue
-                yield (value, field)
+                if value:
+                    if ".png" in value or ".mp3" in value or ".ogg" in value or ".wav" in value: continue
+                    yield (value, field)
 
 

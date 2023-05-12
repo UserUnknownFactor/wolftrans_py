@@ -30,13 +30,11 @@ class Map():
             try:
                 coder.verify(self.MAP_MAGIC_JP2)
                 self.MAP_MAGIC = self.MAP_MAGIC_JP2
-                coder.is_utf8 = False
             except Exception as e:
                 try:
                     coder.verify(self.MAP_MAGIC_JP3)
                     self.MAP_MAGIC = self.MAP_MAGIC_JP3
                     self.wolfversion = 3
-                    coder.is_utf8 = True
                 except:
                     coder.verify(self.MAP_MAGIC_JP31)
                     self.MAP_MAGIC = self.MAP_MAGIC_JP31
@@ -81,7 +79,7 @@ class Map():
             coder.write_u4(self.tileset_id)
             if self.wolfversion == 3:
                 coder.write_u2(self.unk1)
-                coder.is_utf8 = True
+
             coder.write_u4(self.width)
             coder.write_u4(self.height)
             coder.write_u4(len(self.events))

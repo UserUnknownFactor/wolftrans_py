@@ -36,7 +36,6 @@ class GameDat():
                 except:
                     coder.verify(self.MAGIC_NUMBER3)
                     self.MAGIC_NUMBER = self.MAGIC_NUMBER3
-                    coder.is_utf8 = True
 
             #TODO what is most of the junk in this file?
             self.unknown1 = coder.read_byte_array()
@@ -68,8 +67,10 @@ class GameDat():
         with FileCoder.open(filename, 'w', self.SEED_INDICES, self.crypt_header) as coder:
             if not self.encrypted:
                 coder.write(self.MAGIC_NUMBER)
-            if self.MAGIC_NUMBER == self.MAGIC_NUMBER3:
-                coder.is_utf8 = True
+            #if self.MAGIC_NUMBER == self.MAGIC_NUMBER3:
+            #    coder.is_utf8 = True
+            #else:
+            #    coder.is_utf8 = False
 
             coder.write_byte_array(self.unknown1)
             coder.write_u4(self.file_version)

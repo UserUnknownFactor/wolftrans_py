@@ -6,6 +6,7 @@ class Database():
     DATABASE_MAGIC2 = b'W\x00\x00OL\x00FM\x00\xc1'
     DATABASE_MAGIC_CDB = b'W\x00\x00OLUFM\x00\xc2'
     DATABASE_MAGIC_G = b'W\x00\x00OL\x00FMU'
+    UTF8 = False
 
     def __init__(self, project_filename, dat_filename):
         with FileCoder.open(project_filename, 'r') as coder:
@@ -21,17 +22,16 @@ class Database():
                 try:
                     coder.verify(self.DATABASE_MAGIC2)
                     self.DATABASE_MAGIC = self.DATABASE_MAGIC2
-                    coder.is_utf8 = False
+                    UTF8 = False
                 except:
                     try:
                         coder.verify(self.DATABASE_MAGIC_CDB)
                         self.DATABASE_MAGIC = self.DATABASE_MAGIC_CDB
-                        coder.is_utf8 = True
+                        UTF8 = True
                     except:
                         coder.verify(self.DATABASE_MAGIC_G)
                         self.DATABASE_MAGIC = self.DATABASE_MAGIC_G
-                        coder.is_utf8 = True
-
+                        UTF8 = True
 
             num_types = coder.read_u4()
             if num_types != len(self.types):
@@ -57,6 +57,7 @@ class Database():
                 coder.write_u1(self.unknown_encrypted_1)
             else:
                 coder.write(self.DATABASE_MAGIC)
+
             coder.write_u4(len(self.types))
             [t.write_dat(coder) for t in self.types]
             coder.write_u1(self.last_terminator)

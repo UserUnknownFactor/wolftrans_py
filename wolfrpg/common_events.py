@@ -13,12 +13,10 @@ class CommonEvents():
             try:
                 coder.verify(self.COMMON_MAGIC2)
                 self.COMMON_MAGIC = self.COMMON_MAGIC2
-                coder.is_utf8 = False
             except:
                 coder.verify(self.COMMON_MAGIC3)
                 self.COMMON_MAGIC = self.COMMON_MAGIC3
                 self.wolfversion = 3
-                coder.is_utf8 = True
 
             events_len = coder.read_u4()
             print('events:', events_len)

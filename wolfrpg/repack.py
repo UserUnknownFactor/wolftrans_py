@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import sys, os, glob, re
-from wolfrpg import commands, maps, databases, gamedats, common_events
+from wolfrpg import commands, maps, databases, gamedats, common_events, filecoder
 from wolfrpg.service_fn import read_csv_list, print_progress
 #from ruamel import yaml # NOTE: for debug and string search purposes
 
-MODE_SETSTRING_AS_STRING = any(a == "-s" for a in sys.argv[1:]) #True
-MODE_ENABLE_CE_PARAMS = True
-MODE_REPACK_DB_NAMES = True
+MODE_ENABLE_CE_PARAMS = False
+MODE_REPACK_DB_NAMES = False
+MODE_SETSTRING_AS_STRING = True
 
 STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
@@ -53,7 +53,7 @@ def translate_attribute_of_command(command, value):
                     command.string_args[i] = normalize_n(value[1])
                     is_translated = True
         elif isinstance(command, commands.Picture):
-            if command.ptype == 'text':
+            if command.ptype == "text":
                 if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
                     command.text = normalize_n(value[1])
                     is_translated = True
@@ -120,22 +120,37 @@ def make_out_name(name, work_dir):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    #parser.add_argument("-f", default="map,common,game,dbs", help="Type of files to repack")
+    parser.add_argument("-s", help="Treat strings as attributes", action="store_false")
+    parser.add_argument("-n", help="Repack database names", action="store_false")
+    parser.add_argument("-n", help="Repack CommonEvent parameters", action="store_false")
+    parser.add_argument("-u", help='Repack strings as UTF-8', action="store_true")
+    args = parser.parse_args()
+    #print(args)
+    
+    MODE_SETSTRING_AS_STRING = args.s
+    MODE_REPACK_DB_NAMES =  args.n
+    MODE_ENABLE_CE_PARAMS = args.c
+    filecoder.initialize(args.u)
+
     work_dir = os.getcwd()
 
-    map_names = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), '*.mps'))) # map data
-    commonevents_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), 'CommonEvent.dat'))) # common events
-    dat_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), 'Game.dat'))) # basicdata
+    map_names = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "*.mps"))) # map data
+    commonevents_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "CommonEvent.dat"))) # common events
+    dat_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "Game.dat"))) # basicdata
     db_names = list(filter(lambda x: "wolfrpg" not in x and "SysDataBaseBasic" not in x and "translation_out" not in x, search_resource(
-        os.getcwd(), '*.project'))) # projects
+        os.getcwd(), "*.project"))) # projects
 
     #maps_cache = dict()
     print("Translating maps...")
     for map_name in map_names:
-        print("Translating",map_name,"...")
+        print("Translating", map_name, "...")
         try:
             mp = maps.Map(map_name)
         except Exception as e:
-            print(f'FAILED: {e}')
+            print(f"FAILED: {e}")
             continue
         #maps_cache[map_name] = mp
         strs = read_string_translations(map_name)
@@ -152,7 +167,7 @@ def main():
                             break
 
         mp.write(make_out_name(map_name, work_dir))
-        #with open(remove_ext(map_name) + '.yaml') as f: w.write(yaml.dump(mp))
+        #with open(remove_ext(map_name) + ".yaml") as f: w.write(yaml.dump(mp))
 
     print("Translating common events...")
     commonevents_name = commonevents_name[0]
@@ -179,7 +194,7 @@ def main():
                     break
     print_progress(100, 100)
     ce.write(make_out_name(commonevents_name, work_dir))
-    #with open(remove_ext(commonevents_name) + '.yaml') as f: w.write(yaml.dump(ce))
+    #with open(remove_ext(commonevents_name) + ".yaml") as f: w.write(yaml.dump(ce))
 
     print("Translating project databases...")
     for db_name in db_names:

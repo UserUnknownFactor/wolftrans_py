@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys, os, glob, re
-from wolfrpg import commands, maps, databases, gamedats, common_events,route
+from wolfrpg import commands, maps, databases, gamedats, common_events, route, filecoder
 from wolfrpg.service_fn import write_csv_list, read_csv_dict
 from ruamel.yaml import YAML # NOTE: for debug and string search purposes
 if sys.version_info < (3, 9):
@@ -8,7 +8,7 @@ if sys.version_info < (3, 9):
     sys.exit(2)
 
 DUMP_YAML = True
-MODE_SETSTRING_AS_STRING = any(a == "-s" for a in sys.argv[1:]) #True
+MODE_SETSTRING_AS_STRING = True
 MODE_EXTRACT_DB_NAMES = True
 
 yaml=YAML()
@@ -165,15 +165,24 @@ def search_tags(arr, re_tags=REPLACEMENT_TAGS_RE):
     return list(tags)
 
 def main():
-    args = 'map,common,game,dbs'
-    if len(sys.argv) > 1:
-        args = sys.argv[1]
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", default='map,common,game,dbs', help='Type of files to extract')
+    parser.add_argument("-s", help='Treat strings as attributes', action="store_false")
+    parser.add_argument("-n", help='Extract database names', action="store_false")
+    parser.add_argument("-u", help='Extract strings as UTF-8', action="store_true")
+    args = parser.parse_args()
+    #print(args)
+    
+    MODE_SETSTRING_AS_STRING = args.s
+    MODE_EXTRACT_DB_NAMES =  args.n
+    filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
 
-    map_names = search_resource(os.getcwd(), '*.mps') if 'map' in args else [] # map data
-    commonevents_name = search_resource(os.getcwd(), 'CommonEvent.dat') if 'common' in args else [] # common events
-    dat_name = search_resource(os.getcwd(), 'Game.dat') if 'game' in args else []  # basic data
+    map_names = search_resource(os.getcwd(), '*.mps') if 'map' in args.f else [] # map data
+    commonevents_name = search_resource(os.getcwd(), 'CommonEvent.dat') if 'common' in args.f else [] # common events
+    dat_name = search_resource(os.getcwd(), 'Game.dat') if 'game' in args.f else []  # basic data
     db_names = list(filter(lambda x: "wolfrpg" not in x and "SysDataBaseBasic" not in x, search_resource(
-        os.getcwd(), '*.project'))) if 'dbs' in args else [] # projects
+        os.getcwd(), '*.project'))) if 'dbs' in args.f else [] # projects
 
     tags = []
 
@@ -188,7 +197,8 @@ def main():
         try:
             mp = maps.Map(map_name)
         except Exception as e:
-            print(f'FAILED\n{e}')
+            print(f"FAILED: {e}")
+            continue
         #maps_cache[map_name] = mp
         for event in mp.events:
             for page in event.pages:

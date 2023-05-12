@@ -1,5 +1,15 @@
-﻿import struct
+﻿import struct, sys
 from io import StringIO, SEEK_CUR, SEEK_END
+
+this = sys.modules[__name__]
+this.USE_UTF8_STRINGS = None
+
+def initialize(use_utf8: bool = False):
+    if (this.USE_UTF8_STRINGS is None):
+        this.USE_UTF8_STRINGS = use_utf8
+        print("UTF-8 strings:", USE_UTF8_STRINGS)
+    else:
+        raise RuntimeError(f"UTF-8 usage already set to {USE_UTF8_STRINGS}.")
 
 class FileCoder(object):
     #############
@@ -22,7 +32,9 @@ class FileCoder(object):
         self.filename = filename
         self.io.seek(0)
         self.is_be = False
-        self.is_utf8 = True
+        if USE_UTF8_STRINGS is None:
+            raise Exception("Please specify string encoding via filecoder.initialize() method")
+        self.is_utf8 = USE_UTF8_STRINGS
 
     def __enter__(self):
         return self

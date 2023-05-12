@@ -1,5 +1,4 @@
 ﻿# -*- coding: utf-8 -*-
-from .filecoder import FileCoder
 from .route import RouteCommand
 
 ##########################

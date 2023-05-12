@@ -147,11 +147,11 @@ def remove_ext(name):
     name = name.split('.')
     return '.'.join(name[:-1])
 
-def write_translations(name, attrs, strs):
-    extract_previous(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX), attrs)
-    write_csv_list(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX), attrs)
-    extract_previous(make_postfixed_name(name, STRINGS_DB_POSTFIX), strs)
-    write_csv_list(make_postfixed_name(name, STRINGS_DB_POSTFIX), strs)
+def write_translations(name, attrs, strs, ext=''):
+    extract_previous(make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX), attrs)
+    write_csv_list(make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX), attrs)
+    extract_previous(make_postfixed_name(name, ext + STRINGS_DB_POSTFIX), strs)
+    write_csv_list(make_postfixed_name(name, ext + STRINGS_DB_POSTFIX), strs)
 
 def search_tags(arr, re_tags=REPLACEMENT_TAGS_RE):
     if len(arr) == 0:
@@ -210,7 +210,7 @@ def main():
                     if len(s):
                         translatable_strings += [make_csv_field(strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
         translatable_attrs = [make_csv_field(attr, command) for attr in translatable_attrs]
-        write_translations(map_name, translatable_attrs, translatable_strings)
+        write_translations(map_name, translatable_attrs, translatable_strings, ".mps")
         tags += search_tags(translatable_attrs)
         tags += search_tags(translatable_strings)
         if DUMP_YAML:
@@ -237,7 +237,7 @@ def main():
                 if len(s):
                     translatable_strings += [make_csv_field(strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
         translatable_attrs = [make_csv_field(attr, command) for attr in translatable_attrs]
-        write_translations(commonevents_name, translatable_attrs, translatable_strings)
+        write_translations(commonevents_name, translatable_attrs, translatable_strings, ".dat")
         tags += search_tags(translatable_attrs)
         tags += search_tags(translatable_strings)
         if DUMP_YAML:
@@ -268,14 +268,14 @@ def main():
                             translatable.append([item, ''])#, f"DATABASE@{t.data.index}"])
                             test_a.add(item)
 
-        extract_previous(os.path.join(os.path.dirname(db_name), db_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
-        write_csv_list(os.path.join(os.path.dirname(db_name), db_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
+        extract_previous(os.path.join(os.path.dirname(db_name), db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        write_csv_list(os.path.join(os.path.dirname(db_name), db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
         tags += search_tags(translatable)
         if DUMP_YAML:
             with open(remove_ext(db_name) + '.yaml', mode='w', encoding='utf-8') as f: yaml.dump(db, f)
 
     if len(dat_name): dat_name = dat_name[0]
-    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX)):
+    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ".dat" + ATTRIBUTES_DB_POSTFIX)):
         print('Extracting',os.path.basename(dat_name) +'...')
         try:
             gd = gamedats.GameDat(dat_name)
@@ -292,8 +292,8 @@ def main():
         if gd.subfonts:
             translatable += [[font, '', 'SUBFONT'] for font in gd.subfonts if font]
         dat_name_only = remove_ext(os.path.basename(dat_name))
-        extract_previous(os.path.join(os.path.dirname(dat_name), dat_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
-        write_csv_list(os.path.join(os.path.dirname(dat_name), dat_name_only + ATTRIBUTES_DB_POSTFIX), translatable)
+        extract_previous(os.path.join(os.path.dirname(dat_name), dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        write_csv_list(os.path.join(os.path.dirname(dat_name), dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
 
     tags = [[t, "a0%dtg," % i] for i, t in enumerate(set(tags))]
     tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))

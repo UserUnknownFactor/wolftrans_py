@@ -92,13 +92,17 @@ def remove_ext(name):
     name = name.split('.')
     return '.'.join(name[:-1])
 
-def read_string_translations(name):
+def read_string_translations(name, ext=''):
     name = remove_ext(name)
-    return read_csv_list(make_postfixed_name(name, STRINGS_DB_POSTFIX))
+    name = make_postfixed_name(name, ext + STRINGS_DB_POSTFIX)
+    #print("Parsing", name)
+    return read_csv_list(name)
 
-def read_attribute_translations(name):
+def read_attribute_translations(name, ext=''):
     name = remove_ext(name)
-    return read_csv_list(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX))
+    name = make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX)
+    #print("Parsing", name)
+    return read_csv_list(name)
 
 def replace_tags(arr, repl_arr):
     if len(arr) == 0:
@@ -125,7 +129,7 @@ def main():
     #parser.add_argument("-f", default="map,common,game,dbs", help="Type of files to repack")
     parser.add_argument("-s", help="Treat strings as attributes", action="store_false")
     parser.add_argument("-n", help="Repack database names", action="store_false")
-    parser.add_argument("-n", help="Repack CommonEvent parameters", action="store_false")
+    parser.add_argument("-c", help="Repack CommonEvent parameters", action="store_false")
     parser.add_argument("-u", help='Repack strings as UTF-8', action="store_true")
     args = parser.parse_args()
     #print(args)
@@ -153,8 +157,8 @@ def main():
             print(f"FAILED: {e}")
             continue
         #maps_cache[map_name] = mp
-        strs = read_string_translations(map_name)
-        attrs = read_attribute_translations(map_name)
+        strs = read_string_translations(map_name, ".mps")
+        attrs = read_attribute_translations(map_name, ".mps")
         for event in mp.events:
             for page in event.pages:
                 for i, command in enumerate(page.commands):
@@ -172,9 +176,9 @@ def main():
     print("Translating common events...")
     commonevents_name = commonevents_name[0]
     ce = common_events.CommonEvents(commonevents_name)
-    strs = read_string_translations(commonevents_name)
+    strs = read_string_translations(commonevents_name, ".dat")
     l_strs = len(strs)
-    attrs = read_attribute_translations(commonevents_name)
+    attrs = read_attribute_translations(commonevents_name, ".dat")
     l_attrs = len(attrs)
     print_progress(0, 100)
     l_events = sum(1 for _ in ce.events)
@@ -201,7 +205,7 @@ def main():
         print("Translating",db_name,"...")
         db_name_only = remove_ext(os.path.basename(db_name))
         db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
-        attrs = read_attribute_translations(db_name)
+        attrs = read_attribute_translations(db_name, ".dat")
         for t in db.types:
             for i, d in enumerate(t.data):
                 if MODE_REPACK_DB_NAMES and d.name:
@@ -219,7 +223,7 @@ def main():
         #with open(remove_ext(db_name) + '.yaml') as f: w.write(yaml.dump(db))
 
     dat_name = dat_name[0]
-    attrs = [] #read_attribute_translations(dat_name)
+    attrs = [] #read_attribute_translations(dat_name, ".dat")
     if len(attrs):
         print("Translating game dat file...")
         gd = gamedats.GameDat(dat_name)

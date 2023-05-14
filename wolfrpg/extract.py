@@ -3,6 +3,8 @@ import sys, os, glob, re
 from wolfrpg import commands, maps, databases, gamedats, common_events, route, filecoder
 from wolfrpg.service_fn import write_csv_list, read_csv_dict
 from ruamel.yaml import YAML # NOTE: for debug and string search purposes
+import hashlib
+
 if sys.version_info < (3, 9):
     print("This app must run using Python 3.9+")
     sys.exit(2)
@@ -10,6 +12,8 @@ if sys.version_info < (3, 9):
 DUMP_YAML = True
 MODE_SETSTRING_AS_STRING = True
 MODE_EXTRACT_DB_NAMES = True
+MODE_CE_BY_NAME = False
+MODE_CE_DATABASE_REFS = False
 
 yaml=YAML()
 yaml.register_class(maps.Map)
@@ -91,15 +95,29 @@ ATTRIBUTES_DB_POSTFIX = "_" + ATTRIBUTES_NAME + ".csv"
 REPLACEMENT_TAGS_RE = r'(?:「|」|(?:(?:\\[-\+_\.\{\}%A-Za-z\d]+\[[\d:-_]+\]){1,}|\\[A-Za-z\d<>]+))'
 MEDIA_EXTENSION_RE = re.compile(r'\.(?:png|wave?|aac|jpe?g|ogg|mp3|flac|webp)$')
 
+
+def tag_hash(string, str_enc="utf-8", hash_len=7):
+    """ Generates short English tags for MTL from any kind of string. """
+    if len(string) < 1: return ''
+    d = hashlib.sha1(string.encode(str_enc)).digest()
+    s = ''
+    n_chars = 26 + 10
+    for i in range(0, hash_len):
+        x = d[i] % n_chars
+        #s += chr(ord('a') + x) # lowercase letters, n_chars = 26
+        s += (chr(ord('0') + x - 26) if x >= 26 else chr(ord('a') + x)) # numbers + lowercase, n_chars = 36
+        #s += (chr(ord('A') + x - 26) if x >= 26 else chr(ord('a') + x)) # letters, n_chars = 52
+    return s
+
 def search_resource(path, name):
     files = glob.glob(os.path.join(path, "**", name), recursive = True)
     return files if len(files) else []
 
 def is_translatable(text):
-    return len(text) and "\u25A0" != text
+    return len(text.replace('\r','').replace('\n','').strip()) > 0 and '\u25A0' != text
 
 def extract_previous(filename, textarr):
-    old = read_csv_dict(filename.replace('.csv', '.old'))
+    old = read_csv_dict(filename.replace(".csv", ".old"))
     if not len(old): return
     for i, a in enumerate(textarr):
         if a[0] in old:
@@ -108,29 +126,35 @@ def extract_previous(filename, textarr):
 
 def attributes_of_command(command):
     if isinstance(command, commands.Choices):
-        return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
-    if isinstance(command, commands.CommonEvent):
-        return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
-    if isinstance(command, commands.CommonEventByName):
-        return [i.replace('\r\n', '\n') for i in command.text if is_translatable(i)]
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)]
+    elif isinstance(command, commands.CommonEvent):
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)]
+    elif isinstance(command, commands.CommonEventByName):
+        if MODE_CE_BY_NAME:
+            return [i.replace('\r', '') for i in command.text if is_translatable(i)]
+        else:
+            return []
     elif isinstance(command, commands.Database):
-        texts = [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
-        texts += [i.replace('\r\n', '\n') for i in command.string_args if is_translatable(i)]
-        return texts
+        if MODE_CE_DATABASE_REFS:
+            texts = [command.text.replace('\r', '')] if is_translatable(command.text) else []
+            texts += [i.replace('\r', '') for i in command.string_args if is_translatable(i)]
+            return texts
+        else:
+            return []
     elif isinstance(command, commands.StringCondition):
-        return [i.replace('\r\n', '\n') for i in command.string_args if is_translatable(i)]
+        return [i.replace('\r', '') for i in command.string_args if is_translatable(i)]
     elif isinstance(command, commands.Picture):
         if command.ptype == 'text':
-            return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+            return [command.text.replace('\r', '')] if is_translatable(command.text) else []
     elif not MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
-        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+        return [command.text.replace('\r', '')] if is_translatable(command.text) else []
     return []
 
 def strings_of_command(command):
     if isinstance(command, commands.Message):
-        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+        return [command.text.replace('\r', '')] if is_translatable(command.text) else []
     elif MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
-        return [command.text.replace('\r\n', '\n')] if is_translatable(command.text) else []
+        return [command.text.replace('\r', '')] if is_translatable(command.text) else []
     return []
 
 def get_context(command):
@@ -139,19 +163,19 @@ def get_context(command):
 def make_csv_field(text, context, translation=''):
     return [text, translation]#, get_context(command)]
 
-def make_postfixed_name(name, postfix):
+def make_postfixed_name(name, postfix, ext=''):
     name = remove_ext(name)
-    return os.path.join(os.path.dirname(name), name + postfix)
+    return os.path.join(os.path.dirname(name), name + ext + postfix)
 
 def remove_ext(name):
     name = name.split('.')
     return '.'.join(name[:-1])
 
 def write_translations(name, attrs, strs, ext=''):
-    extract_previous(make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX), attrs)
-    write_csv_list(make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX), attrs)
-    extract_previous(make_postfixed_name(name, ext + STRINGS_DB_POSTFIX), strs)
-    write_csv_list(make_postfixed_name(name, ext + STRINGS_DB_POSTFIX), strs)
+    extract_previous(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX, ext), attrs)
+    write_csv_list(make_postfixed_name(name, ATTRIBUTES_DB_POSTFIX, ext), attrs)
+    extract_previous(make_postfixed_name(name, STRINGS_DB_POSTFIX, ext), strs)
+    write_csv_list(make_postfixed_name(name, STRINGS_DB_POSTFIX, ext), strs)
 
 def search_tags(arr, re_tags=REPLACEMENT_TAGS_RE):
     if len(arr) == 0:
@@ -165,33 +189,42 @@ def search_tags(arr, re_tags=REPLACEMENT_TAGS_RE):
     return list(tags)
 
 def main():
+    global MODE_SETSTRING_AS_STRING
+    global MODE_EXTRACT_DB_NAMES
+    global MODE_CE_BY_NAME
+    global MODE_CE_DATABASE_REFS
+
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", default='map,common,game,dbs', help='Type of files to extract')
-    parser.add_argument("-s", help='Treat strings as attributes', action="store_false")
-    parser.add_argument("-n", help='Extract database names', action="store_false")
-    parser.add_argument("-u", help='Extract strings as UTF-8', action="store_true")
+    parser.add_argument("-f", default="map,common,game,dbs", help="Type of files to extract")
+    parser.add_argument("-s", help="Treat SetString as attributes", action="store_true")
+    parser.add_argument("-n", help="Don't extract Database names", action="store_false")
+    parser.add_argument("-b", help="Don't extract CommandEventByName", action="store_false")
+    parser.add_argument("-d", help="Don't extract CommonEvents database refs", action="store_false")
+    parser.add_argument("-u", help="Extract strings as UTF-8", action="store_true")
     args = parser.parse_args()
-    #print(args)
-    
+    print(args)
+
     MODE_SETSTRING_AS_STRING = args.s
     MODE_EXTRACT_DB_NAMES =  args.n
+    MODE_CE_BY_NAME =  args.b
+    MODE_CE_DATABASE_REFS = args.d
     filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
 
-    map_names = search_resource(os.getcwd(), '*.mps') if 'map' in args.f else [] # map data
-    commonevents_name = search_resource(os.getcwd(), 'CommonEvent.dat') if 'common' in args.f else [] # common events
-    dat_name = search_resource(os.getcwd(), 'Game.dat') if 'game' in args.f else []  # basic data
+    map_names = search_resource(os.getcwd(), "*.mps") if "map" in args.f else [] # map data
+    commonevents_name = search_resource(os.getcwd(), "CommonEvent.dat") if "common" in args.f else [] # common events
+    dat_name = search_resource(os.getcwd(), "Game.dat") if "game" in args.f else []  # basic data
     db_names = list(filter(lambda x: "wolfrpg" not in x and "SysDataBaseBasic" not in x, search_resource(
-        os.getcwd(), '*.project'))) if 'dbs' in args.f else [] # projects
+        os.getcwd(), "*.project"))) if "dbs" in args.f else [] # projects
 
     tags = []
 
     #maps_cache = dict()
     #map_names = []
     for map_name in map_names:
-        if os.path.isfile(make_postfixed_name(map_name, ATTRIBUTES_DB_POSTFIX)) or os.path.isfile(make_postfixed_name(map_name, STRINGS_DB_POSTFIX)):
+        if os.path.isfile(make_postfixed_name(map_name, ATTRIBUTES_DB_POSTFIX, ".mps")) or os.path.isfile(make_postfixed_name(map_name, STRINGS_DB_POSTFIX, ".mps")):
             continue
-        print('Extracting',os.path.basename(map_name) +'...')
+        print("Extracting",os.path.basename(map_name) +"...")
         translatable_attrs = dict()
         translatable_strings = []
         try:
@@ -214,13 +247,13 @@ def main():
         tags += search_tags(translatable_attrs)
         tags += search_tags(translatable_strings)
         if DUMP_YAML:
-            with open(remove_ext(map_name) + '.yaml', mode='w', encoding='utf-8') as f: yaml.dump(mp, f)
+            with open(remove_ext(map_name) + ".yaml", mode="w", encoding="utf-8") as f: yaml.dump(mp, f)
 
     if len(commonevents_name): commonevents_name = commonevents_name[0]
     if len(commonevents_name) and not (
-            os.path.isfile(make_postfixed_name(commonevents_name, ATTRIBUTES_DB_POSTFIX)) or (
-                os.path.isfile(make_postfixed_name(commonevents_name, STRINGS_DB_POSTFIX)))):
-        print('Extracting',os.path.basename(commonevents_name) +'...')
+            os.path.isfile(make_postfixed_name(commonevents_name, ATTRIBUTES_DB_POSTFIX, ".dat")) or (
+                os.path.isfile(make_postfixed_name(commonevents_name, STRINGS_DB_POSTFIX, ".dat")))):
+        print("Extracting",os.path.basename(commonevents_name) +"...")
         try:
             ce = common_events.CommonEvents(commonevents_name)
         except Exception as e:
@@ -241,13 +274,13 @@ def main():
         tags += search_tags(translatable_attrs)
         tags += search_tags(translatable_strings)
         if DUMP_YAML:
-            with open(remove_ext(commonevents_name) + '.yaml', mode='w', encoding='utf-8') as f: yaml.dump(ce, f)
+            with open(remove_ext(commonevents_name) + ".yaml", mode="w", encoding="utf-8") as f: yaml.dump(ce, f)
 
     for db_name in db_names:
-        if os.path.isfile(make_postfixed_name(db_name, ATTRIBUTES_DB_POSTFIX)):
+        if os.path.isfile(make_postfixed_name(db_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
             continue
         base_name = os.path.basename(db_name)
-        print('Extracting', base_name + '...')
+        print("Extracting", base_name + "...")
         db_name_only = remove_ext(os.path.basename(db_name))
         try:
             db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
@@ -259,11 +292,13 @@ def main():
         for t in db.types:
             for i, d in enumerate(t.data):
                 if MODE_EXTRACT_DB_NAMES and d.name and d.name not in test_a:
-                    translatable.append([d.name, ''])
-                    test_a.add(d.name)
+                    item = d.name.replace('\r', '')
+                    if item.replace('\r','').replace('\n','').strip():
+                        translatable.append([item, ''])
+                        test_a.add(d.name)
                 for l in d.each_translatable():
                     if len(l) and len(l[0]):
-                        item = l[0].replace('\r\n', '\n')
+                        item = l[0].replace('\r', '')
                         if item not in test_a:
                             translatable.append([item, ''])#, f"DATABASE@{t.data.index}"])
                             test_a.add(item)
@@ -272,11 +307,11 @@ def main():
         write_csv_list(os.path.join(os.path.dirname(db_name), db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
         tags += search_tags(translatable)
         if DUMP_YAML:
-            with open(remove_ext(db_name) + '.yaml', mode='w', encoding='utf-8') as f: yaml.dump(db, f)
+            with open(remove_ext(db_name) + ".yaml", mode="w", encoding="utf-8") as f: yaml.dump(db, f)
 
     if len(dat_name): dat_name = dat_name[0]
-    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ".dat" + ATTRIBUTES_DB_POSTFIX)):
-        print('Extracting',os.path.basename(dat_name) +'...')
+    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
+        print("Extracting",os.path.basename(dat_name) +"...")
         try:
             gd = gamedats.GameDat(dat_name)
         except Exception as e:
@@ -284,20 +319,20 @@ def main():
             sys.exit(2)
         translatable = []
         if gd.title:
-            translatable.append([gd.title, '', 'TITLE'])
+            translatable.append([gd.title, '', "TITLE"])
         if gd.version:
-            translatable.append([gd.version, '', 'VERSION'])
+            translatable.append([gd.version, '', "VERSION"])
         if gd.font:
-            translatable.append([gd.font, '', 'FONT'])
+            translatable.append([gd.font, '', "FONT"])
         if gd.subfonts:
-            translatable += [[font, '', 'SUBFONT'] for font in gd.subfonts if font]
+            translatable += [[font, '', "SUBFONT"] for font in gd.subfonts if font]
         dat_name_only = remove_ext(os.path.basename(dat_name))
         extract_previous(os.path.join(os.path.dirname(dat_name), dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
         write_csv_list(os.path.join(os.path.dirname(dat_name), dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
 
-    tags = [[t, "a0%dtg," % i] for i, t in enumerate(set(tags))]
+    tags = [[t, f"{tag_hash(t)};"] for i, t in enumerate(set(tags))]
     tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))
-    write_csv_list(os.path.join(os.getcwd(), 'replacement_tags.csv'), tags)
+    write_csv_list(os.path.join(os.getcwd(), "replacement_tags.csv"), tags)
 
 if __name__ == "__main__":
     main()

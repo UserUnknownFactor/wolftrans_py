@@ -57,7 +57,7 @@ class Map():
             # TODO: interpret this data
             tiles_length = self.width * self.height * 3 * 4
             self.tiles = coder.read(tiles_length)
-            
+
             self.events = []
             if coder.eof:
                 return #TileMap.mps case

@@ -293,7 +293,7 @@ class Database():
                 #if field.name:
                 #    yield (field.name, field)
                 value = self.get_field(field)
-                if value:
+                if value and value.replace('\r','').replace('\n','').strip():
                     if ".png" in value or ".mp3" in value or ".ogg" in value or ".wav" in value: continue
                     yield (value, field)
 

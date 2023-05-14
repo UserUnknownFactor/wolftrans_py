@@ -4,7 +4,8 @@ from wolfrpg import commands, maps, databases, gamedats, common_events, filecode
 from wolfrpg.service_fn import read_csv_list, print_progress
 #from ruamel import yaml # NOTE: for debug and string search purposes
 
-MODE_ENABLE_CE_PARAMS = False
+MODE_REPACK_CE_PARAMS = False
+MODE_REPACK_CE_BY_NAME = False
 MODE_REPACK_DB_NAMES = False
 MODE_SETSTRING_AS_STRING = True
 
@@ -17,9 +18,9 @@ DEFAULT_OUT_DIR = "translation_out"
 def search_resource(path, name):
     files = glob.glob(os.path.join(path, "**", name), recursive = True)
     return files if len(files) else []
-    
+
 def normalize_n(line, into_csv_n = False):
-    return line.replace('\r\n', '\n') if into_csv_n else line.replace('\n', '\r\n')
+    return line.replace('\r', '') if into_csv_n else line.replace('\n', '\r\n')
 
 def translate_attribute_of_command(command, value):
     is_translated = False
@@ -29,12 +30,12 @@ def translate_attribute_of_command(command, value):
                 if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
                     command.text[i] = normalize_n(value[1])
                     is_translated = True
-        elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEvent):
+        elif MODE_REPACK_CE_PARAMS and isinstance(command, commands.CommonEvent):
             for i, line in enumerate(command.text):
                 if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
                     command.text[i] = normalize_n(value[1])
                     is_translated = True
-        elif MODE_ENABLE_CE_PARAMS and isinstance(command, commands.CommonEventByName):
+        elif MODE_REPACK_CE_BY_NAME and isinstance(command, commands.CommonEventByName):
             for i, line in enumerate(command.text):
                 if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
                     command.text[i] = normalize_n(value[1])
@@ -124,20 +125,27 @@ def make_out_name(name, work_dir):
 
 
 def main():
+    global MODE_SETSTRING_AS_STRING
+    global MODE_REPACK_DB_NAMES
+    global MODE_REPACK_CE_PARAMS
+    global MODE_REPACK_CE_BY_NAME
+
     import argparse
     parser = argparse.ArgumentParser()
     #parser.add_argument("-f", default="map,common,game,dbs", help="Type of files to repack")
-    parser.add_argument("-s", help="Treat strings as attributes", action="store_false")
-    parser.add_argument("-n", help="Repack database names", action="store_false")
-    parser.add_argument("-c", help="Repack CommonEvent parameters", action="store_false")
-    parser.add_argument("-u", help='Repack strings as UTF-8', action="store_true")
+    parser.add_argument("-s", help="Treat SetString as attributes", action="store_true")
+    parser.add_argument("-n", help="Repack Database names", action="store_true")
+    parser.add_argument("-c", help="Don't repack CommonEvent parameters", action="store_false")
+    parser.add_argument("-b", help="Don't repack CommandEventByName parameters", action="store_false")
+    parser.add_argument("-u", help="Repack strings as UTF-8", action="store_true")
     args = parser.parse_args()
-    #print(args)
-    
+    print(args)
+
     MODE_SETSTRING_AS_STRING = args.s
     MODE_REPACK_DB_NAMES =  args.n
-    MODE_ENABLE_CE_PARAMS = args.c
-    filecoder.initialize(args.u)
+    MODE_REPACK_CE_PARAMS = args.c
+    MODE_REPACK_CE_BY_NAME = args.b
+    filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
 
     work_dir = os.getcwd()
 
@@ -202,9 +210,16 @@ def main():
 
     print("Translating project databases...")
     for db_name in db_names:
-        print("Translating",db_name,"...")
+        print("Translating", db_name,"...")
         db_name_only = remove_ext(os.path.basename(db_name))
-        db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
+        if not os.path.isfile(db_name.replace(".project", ".dat")):
+            print("No .dat file for", db_name)
+            continue
+        try:
+            db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
+        except Exception as e:
+            print("Skipping", db_name, "due to error:\n", e,"\n")
+            continue
         attrs = read_attribute_translations(db_name, ".dat")
         for t in db.types:
             for i, d in enumerate(t.data):
@@ -212,12 +227,12 @@ def main():
                     for at in attrs:
                         if (d.name == at[0] or normalize_n(d.name, True) == at[0]) and at[1]:
                             #print(t.data[i], d.name, at[1])
-                            t.data[i].name = at[1].replace('\r\n', '\n').replace('\n','\r\n')
+                            t.data[i].name = at[1].replace('\r', '').replace('\n', '\r\n')
                 for j, l in enumerate(d.each_translatable()):
                     for at in attrs:
                         if (l[0] == at[0] or normalize_n(l[0], True) == at[0]) and at[1]:
                             #print(t.data[i], l[0], at[1])
-                            t.data[i].set_field(l[1], at[1].replace('\r\n', '\n').replace('\n','\r\n'))
+                            t.data[i].set_field(l[1], at[1].replace('\r', '').replace('\n', '\r\n'))
         out_name = make_out_name(db_name, work_dir)
         db.write(out_name, remove_ext(out_name) + '.dat')
         #with open(remove_ext(db_name) + '.yaml') as f: w.write(yaml.dump(db))

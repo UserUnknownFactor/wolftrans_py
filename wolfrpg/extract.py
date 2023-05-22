@@ -1,92 +1,24 @@
 # -*- coding: utf-8 -*-
 import sys, os, glob, re
-from wolfrpg import commands, maps, databases, gamedats, common_events, route, filecoder
+if sys.version_info < (3, 9): print("This app must run using Python 3.9+"), sys.exit(2)
+from wolfrpg import commands, maps, databases, gamedats, common_events, filecoder
 from wolfrpg.service_fn import write_csv_list, read_csv_dict
-from ruamel.yaml import YAML # NOTE: for debug and string search purposes
+from wolfrpg import  yaml_dump
 import hashlib
 
-if sys.version_info < (3, 9):
-    print("This app must run using Python 3.9+")
-    sys.exit(2)
+ENABLE_YAML_DUMPING = True
 
-DUMP_YAML = True
-MODE_SETSTRING_AS_STRING = True
+MODE_SETSTRING_AS_STRING = False
+MODE_CEARG_AS_STRING = False
+MODE_EXTRACT_COMMENTS = False
 MODE_EXTRACT_DB_NAMES = True
-MODE_CE_BY_NAME = False
-MODE_CE_DATABASE_REFS = False
-
-yaml=YAML()
-yaml.register_class(maps.Map)
-yaml.register_class(maps.Map.Event)
-yaml.register_class(maps.Map.Event.Page)
-yaml.register_class(databases.Database)
-yaml.register_class(databases.Database.Type)
-yaml.register_class(databases.Database.Field)
-yaml.register_class(databases.Database.Data)
-yaml.register_class(common_events.CommonEvents)
-yaml.register_class(common_events.CommonEvents.Event)
-yaml.register_class(commands.Command)
-yaml.register_class(commands.Blank)
-yaml.register_class(commands.Checkpoint)
-yaml.register_class(commands.Message)
-yaml.register_class(commands.Choices)
-yaml.register_class(commands.Comment)
-yaml.register_class(commands.ForceStopMessage)
-yaml.register_class(commands.DebugMessage)
-yaml.register_class(commands.ClearDebugText)
-yaml.register_class(commands.VariableCondition)
-yaml.register_class(commands.StringCondition)
-yaml.register_class(commands.SetVariable)
-yaml.register_class(commands.SetString)
-yaml.register_class(commands.InputKey)
-yaml.register_class(commands.SetVariableEx)
-yaml.register_class(commands.AutoInput)
-yaml.register_class(commands.BanInput)
-yaml.register_class(commands.Teleport)
-yaml.register_class(commands.Sound)
-yaml.register_class(commands.Picture)
-yaml.register_class(commands.ChangeColor)
-yaml.register_class(commands.SetTransition)
-yaml.register_class(commands.PrepareTransition)
-yaml.register_class(commands.ExecuteTransition)
-yaml.register_class(commands.StartLoop)
-yaml.register_class(commands.BreakLoop)
-yaml.register_class(commands.BreakEvent)
-yaml.register_class(commands.EraseEvent)
-yaml.register_class(commands.ReturnToTitle)
-yaml.register_class(commands.EndGame)
-yaml.register_class(commands.StartNonPic)
-yaml.register_class(commands.StopNonPic)
-yaml.register_class(commands.ResumeNonPic)
-yaml.register_class(commands.LoopTimes)
-yaml.register_class(commands.Wait)
-yaml.register_class(commands.Move)
-yaml.register_class(commands.WaitForMove)
-yaml.register_class(commands.CommonEvent)
-yaml.register_class(commands.CommonEventReserve)
-yaml.register_class(commands.SetLabel)
-yaml.register_class(commands.JumpLabel)
-yaml.register_class(commands.SaveLoad)
-yaml.register_class(commands.LoadGame)
-yaml.register_class(commands.SaveGame)
-yaml.register_class(commands.MoveDuringEventOn)
-yaml.register_class(commands.MoveDuringEventOff)
-yaml.register_class(commands.Chip)
-yaml.register_class(commands.ChipSet)
-yaml.register_class(commands.Database)
-yaml.register_class(commands.ImportDatabase)
-yaml.register_class(commands.Party)
-yaml.register_class(commands.MapEffect)
-yaml.register_class(commands.ScrollScreen)
-yaml.register_class(commands.Effect)
-yaml.register_class(commands.CommonEventByName)
-yaml.register_class(commands.ChoiceCase)
-yaml.register_class(commands.SpecialChoiceCase)
-yaml.register_class(commands.ElseCase)
-yaml.register_class(commands.CancelCase)
-yaml.register_class(commands.LoopEnd)
-yaml.register_class(commands.BranchEnd)
-yaml.register_class(route.RouteCommand)
+MODE_EXTRACT_CE = False
+MODE_EXTRACT_CE_BY_NAME = False
+MODE_EXTRACT_DATABASE_REFS = False
+MODE_EXTRACT_CE_ARG_N = list()
+MODE_EXTRACT_CEBN_ARG_N = list()
+MODE_EXTRACT_CE_EVID = list()
+MODE_EXTRACT_CEBN_EVID = list()
 
 STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
@@ -128,33 +60,41 @@ def attributes_of_command(command):
     if isinstance(command, commands.Choices):
         return [i.replace('\r', '') for i in command.text if is_translatable(i)]
     elif isinstance(command, commands.CommonEvent):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)]
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
+            not MODE_CEARG_AS_STRING and MODE_EXTRACT_CE) else []
     elif isinstance(command, commands.CommonEventByName):
-        if MODE_CE_BY_NAME:
-            return [i.replace('\r', '') for i in command.text if is_translatable(i)]
-        else:
-            return []
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
+            not MODE_CEARG_AS_STRING and MODE_EXTRACT_CE_BY_NAME) else []
     elif isinstance(command, commands.Database):
-        if MODE_CE_DATABASE_REFS:
+        if MODE_EXTRACT_DATABASE_REFS:
             texts = [command.text.replace('\r', '')] if is_translatable(command.text) else []
             texts += [i.replace('\r', '') for i in command.string_args if is_translatable(i)]
             return texts
-        else:
-            return []
+        return []
     elif isinstance(command, commands.StringCondition):
         return [i.replace('\r', '') for i in command.string_args if is_translatable(i)]
     elif isinstance(command, commands.Picture):
         if command.ptype == 'text':
             return [command.text.replace('\r', '')] if is_translatable(command.text) else []
-    elif not MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
-        return [command.text.replace('\r', '')] if is_translatable(command.text) else []
+    elif isinstance(command, commands.SetString):
+        return [command.text.replace('\r', '')] if (
+            not MODE_SETSTRING_AS_STRING and is_translatable(command.text)) else []
     return []
 
 def strings_of_command(command):
     if isinstance(command, commands.Message):
         return [command.text.replace('\r', '')] if is_translatable(command.text) else []
-    elif MODE_SETSTRING_AS_STRING and isinstance(command, commands.SetString):
-        return [command.text.replace('\r', '')] if is_translatable(command.text) else []
+    elif isinstance(command, commands.Comment):
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if MODE_EXTRACT_COMMENTS else []
+    elif isinstance(command, commands.SetString):
+        return [command.text.replace('\r', '')] if (
+            MODE_SETSTRING_AS_STRING and is_translatable(command.text)) else []
+    elif isinstance(command, commands.CommonEvent):
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
+            MODE_CEARG_AS_STRING and MODE_EXTRACT_CE) else []
+    elif isinstance(command, commands.CommonEventByName):
+        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
+            MODE_CEARG_AS_STRING and MODE_EXTRACT_CE_BY_NAME) else []
     return []
 
 def get_context(command):
@@ -188,27 +128,54 @@ def search_tags(arr, re_tags=REPLACEMENT_TAGS_RE):
             tags = tags.union(t)
     return list(tags)
 
+
 def main():
     global MODE_SETSTRING_AS_STRING
+    global MODE_CEARG_AS_STRING
     global MODE_EXTRACT_DB_NAMES
-    global MODE_CE_BY_NAME
-    global MODE_CE_DATABASE_REFS
+    global MODE_EXTRACT_CE
+    global MODE_EXTRACT_CE_BY_NAME
+    global MODE_EXTRACT_DATABASE_REFS
+    global MODE_EXTRACT_COMMENTS
+
+    global MODE_EXTRACT_CE_ARG_N
+    global MODE_EXTRACT_CEBN_ARG_N
+    global MODE_EXTRACT_CE_EVID
+    global MODE_EXTRACT_CEBN_EVID
 
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", default="map,common,game,dbs", help="Type of files to extract")
-    parser.add_argument("-s", help="Treat SetString as attributes", action="store_true")
+    parser.add_argument("-s", help="Treat SetString as attributes", action="store_false")
+    parser.add_argument("-a", help="Treat CommonEvent[ByName] args as attributes", action="store_false")
     parser.add_argument("-n", help="Don't extract Database names", action="store_false")
-    parser.add_argument("-b", help="Don't extract CommandEventByName", action="store_false")
-    parser.add_argument("-d", help="Don't extract CommonEvents database refs", action="store_false")
+    parser.add_argument("-c", help="Don't extract CommonEvent args", action="store_false")
+    parser.add_argument("-b", help="Don't extract CommonEventByName args", action="store_false")
+    parser.add_argument("-d", help="Don't extract Database refs", action="store_false")
     parser.add_argument("-u", help="Extract strings as UTF-8", action="store_true")
+    #parser.add_argument("-ea", type="str", default='0', metavar="ce_types", nargs='?',
+    #                    help="List of allowed CommonEvent args (#|id; ex: 3|12345,5|12345,3|67890); default: all")
+    #parser.add_argument("-na", type="str", default='0', metavar="cebn_types", nargs='?',
+    #                    help="List of allowed CommonEventByName args (#|id; ex: 3|12345,5|12345,3|67890); default: all")
     args = parser.parse_args()
     print(args)
 
     MODE_SETSTRING_AS_STRING = args.s
+    MODE_CEARG_AS_STRING = args.a
     MODE_EXTRACT_DB_NAMES =  args.n
-    MODE_CE_BY_NAME =  args.b
-    MODE_CE_DATABASE_REFS = args.d
+    MODE_EXTRACT_CE = args.c
+    MODE_EXTRACT_CE_BY_NAME =  args.b
+    MODE_EXTRACT_DATABASE_REFS = args.d
+
+    """
+    MODE_EXTRACT_CE_ARG_N = [] if not args.ea or args.ea == "0" else args.ea.split(',')
+    MODE_EXTRACT_CE_EVID = [int(i.split('|')[1]) if len(i.split('|'))>1 else -1 for i in MODE_EXTRACT_CE_ARG_N if len(i.split('|'))>1]
+    MODE_EXTRACT_CE_ARG_N = [int(i.split('|')[0]) for i in MODE_EXTRACT_CE_ARG_N]
+    MODE_EXTRACT_CEBN_ARG_N = [] if not args.na or args.na == "0" else args.na.split(',')
+    MODE_EXTRACT_CEBN_EVID = [int(i.split('|')[1]) if len(i.split('|'))>1 else -1 for i in MODE_EXTRACT_CEBN_ARG_N if len(i.split('|'))>1]
+    MODE_EXTRACT_CEBN_ARG_N = [int(i.split('|')[0]) for i in MODE_EXTRACT_CEBN_ARG_N]
+    """
+
     filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
 
     map_names = search_resource(os.getcwd(), "*.mps") if "map" in args.f else [] # map data
@@ -222,7 +189,9 @@ def main():
     #maps_cache = dict()
     #map_names = []
     for map_name in map_names:
-        if os.path.isfile(make_postfixed_name(map_name, ATTRIBUTES_DB_POSTFIX, ".mps")) or os.path.isfile(make_postfixed_name(map_name, STRINGS_DB_POSTFIX, ".mps")):
+        if os.path.isfile(
+            make_postfixed_name(map_name, ATTRIBUTES_DB_POSTFIX, ".mps")) or os.path.isfile(
+            make_postfixed_name(map_name, STRINGS_DB_POSTFIX, ".mps")):
             continue
         print("Extracting",os.path.basename(map_name) +"...")
         translatable_attrs = dict()
@@ -241,13 +210,14 @@ def main():
                         translatable_attrs = translatable_attrs | a
                     s = strings_of_command(command)
                     if len(s):
-                        translatable_strings += [make_csv_field(strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
+                        translatable_strings += [make_csv_field(
+                            strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
         translatable_attrs = [make_csv_field(attr, command) for attr in translatable_attrs]
         write_translations(map_name, translatable_attrs, translatable_strings, ".mps")
         tags += search_tags(translatable_attrs)
         tags += search_tags(translatable_strings)
-        if DUMP_YAML:
-            with open(remove_ext(map_name) + ".yaml", mode="w", encoding="utf-8") as f: yaml.dump(mp, f)
+        if ENABLE_YAML_DUMPING:
+            yaml_dump.dump(mp, remove_ext(map_name))
 
     if len(commonevents_name): commonevents_name = commonevents_name[0]
     if len(commonevents_name) and not (
@@ -268,13 +238,14 @@ def main():
                     translatable_attrs = translatable_attrs | a
                 s = strings_of_command(command)
                 if len(s):
-                    translatable_strings += [make_csv_field(strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
+                    translatable_strings += [make_csv_field(
+                        strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
         translatable_attrs = [make_csv_field(attr, command) for attr in translatable_attrs]
         write_translations(commonevents_name, translatable_attrs, translatable_strings, ".dat")
         tags += search_tags(translatable_attrs)
         tags += search_tags(translatable_strings)
-        if DUMP_YAML:
-            with open(remove_ext(commonevents_name) + ".yaml", mode="w", encoding="utf-8") as f: yaml.dump(ce, f)
+        if ENABLE_YAML_DUMPING:
+            yaml_dump.dump(ce, remove_ext(commonevents_name))
 
     for db_name in db_names:
         if os.path.isfile(make_postfixed_name(db_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
@@ -303,11 +274,15 @@ def main():
                             translatable.append([item, ''])#, f"DATABASE@{t.data.index}"])
                             test_a.add(item)
 
-        extract_previous(os.path.join(os.path.dirname(db_name), db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
-        write_csv_list(os.path.join(os.path.dirname(db_name), db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        extract_previous(os.path.join(
+            os.path.dirname(db_name),
+            db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        write_csv_list(os.path.join(
+            os.path.dirname(db_name),
+            db_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
         tags += search_tags(translatable)
-        if DUMP_YAML:
-            with open(remove_ext(db_name) + ".yaml", mode="w", encoding="utf-8") as f: yaml.dump(db, f)
+        if ENABLE_YAML_DUMPING:
+            yaml_dump.dump(db, remove_ext(db_name))
 
     if len(dat_name): dat_name = dat_name[0]
     if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
@@ -327,8 +302,12 @@ def main():
         if gd.subfonts:
             translatable += [[font, '', "SUBFONT"] for font in gd.subfonts if font]
         dat_name_only = remove_ext(os.path.basename(dat_name))
-        extract_previous(os.path.join(os.path.dirname(dat_name), dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
-        write_csv_list(os.path.join(os.path.dirname(dat_name), dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        extract_previous(os.path.join(
+            os.path.dirname(dat_name),
+            dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        write_csv_list(os.path.join(
+            os.path.dirname(dat_name),
+            dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
 
     tags = [[t, f"{tag_hash(t)};"] for i, t in enumerate(set(tags))]
     tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))

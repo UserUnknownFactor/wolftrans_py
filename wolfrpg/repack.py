@@ -23,6 +23,7 @@ ATTRIBUTES_NAME = "attributes"
 STRINGS_DB_POSTFIX = "_" + STRINGS_NAME + ".csv"
 ATTRIBUTES_DB_POSTFIX = "_" + ATTRIBUTES_NAME + ".csv"
 DEFAULT_OUT_DIR = "translation_out"
+COMMENT_TAG = "//"
 
 import ctypes
 CHCP = ctypes.windll.kernel32.GetConsoleCP()
@@ -160,13 +161,13 @@ def read_string_translations(name, ext=''):
     name = remove_ext(name)
     name = make_postfixed_name(name, ext + STRINGS_DB_POSTFIX)
     #print_encoded("Parsing " + name)
-    return read_csv_list(name)
+    return [line for line in read_csv_list(name) if line[0][:len(COMMENT_TAG)] != COMMENT_TAG]
 
 def read_attribute_translations(name, ext=''):
     name = remove_ext(name)
     name = make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX)
     #print_encoded("Parsing " + name)
-    return read_csv_list(name)
+    return [line for line in read_csv_list(name) if line[0][:len(COMMENT_TAG)] != COMMENT_TAG]
 
 def replace_tags(arr, repl_arr):
     if len(arr) == 0:
@@ -256,8 +257,10 @@ def main():
             for page in event.pages:
                 for i, command in enumerate(page.commands):
                     for at in attrs:
+                        if not at: continue
                         tr_b |= translate_attribute_of_command(command, at)
                     for j, _s in enumerate(strs):
+                        if not _s: continue
                         if translate_string_of_command(command, _s):
                             tr_b = True
                             break
@@ -280,12 +283,13 @@ def main():
     for event in ce.events:
         for i, command in enumerate(event.commands):
             for at in attrs:
+                if not at: continue
                 tr_b != translate_attribute_of_command(command, at) # can have many repeating attrs
             for j, _s in enumerate(strs):
                 if not _s: continue #in case of db/csv inconsistency we can't just start from the last
                 if translate_string_of_command(command, _s):
                     li += 1
-                    strs[j] = None # only one translation per string csv, non-repeating
+                    strs[j] = None # there's only one translation per string in csv, non-repeating
                     tr_b = True
                     print_progress(li / l_strs * 100, 100) #last string should corespond to final event
                     break
@@ -312,11 +316,13 @@ def main():
             for i, d in enumerate(t.data):
                 if MODE_REPACK_DB_NAMES and hasattr(d, "name"):
                     for at in attrs:
+                        if not at: continue
                         if (d.name == at[0] or normalize_n(d.name, True) == at[0]) and at[1]:
                             #print(t.data[i], d.name, at[1])
                             t.data[i].name = at[1].replace('\r', '').replace('\n', '\r\n')
                 for j, l in enumerate(d.each_translatable()):
                     for at in attrs:
+                        if not at: continue
                         if (l[0] == at[0] or normalize_n(l[0], True) == at[0]) and at[1]:
                             #print(t.data[i], l[0], at[1])
                             t.data[i].set_field(l[1], at[1].replace('\r', '').replace('\n', '\r\n'))

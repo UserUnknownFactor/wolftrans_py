@@ -1,3 +1,5 @@
+from shutil import get_terminal_size
+
 def dump_hex(bstr):
     for i in range(len(bstr)):
         print("%s " % hex(bstr[i]).replace('0x', ''), end='')
@@ -60,3 +62,19 @@ def parse_strings(data):
             # Reset _str length
             str_len = 0
     return result
+
+def underline_differences(bytes1, bytes2, chunk_size=None):
+    assert len(bytes1) == len(bytes2), "Byte strings must have the same length."
+    if chunk_size is None:
+        chunk_size = 100 #get_terminal_size().columns  # Since each byte will be represented by two hex characters and a space
+
+    hex1 = bytes1.hex()
+    hex2 = bytes2.hex()
+    underline = ''.join('^' if h1 != h2 else ' ' for h1, h2 in zip(hex1, hex2))
+
+    for i in range(0, len(bytes1), chunk_size):  # Each byte is represented by two hex characters
+        chunk_pos = i * 2
+        chunk_pos_end = (i + chunk_size)*2
+        print(hex1[chunk_pos:chunk_pos_end])
+        print(hex2[chunk_pos:chunk_pos_end])
+        print(underline[chunk_pos:chunk_pos_end])

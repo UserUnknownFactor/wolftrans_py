@@ -17,6 +17,7 @@ class CommonEvents():
                 coder.verify(self.COMMON_MAGIC3)
                 self.COMMON_MAGIC = self.COMMON_MAGIC3
                 self.wolfversion = 3
+                coder.is_utf8 = True
 
             events_len = coder.read_u4()
             print('events:', events_len)
@@ -163,6 +164,3 @@ class CommonEvents():
                 coder.write_u1(0x92)
             else:
                 coder.write_u1(0x91)
-
-
-

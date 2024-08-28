@@ -25,11 +25,13 @@ ATTRIBUTES_DB_POSTFIX = "_" + ATTRIBUTES_NAME + ".csv"
 DEFAULT_OUT_DIR = "translation_out"
 COMMENT_TAG = "//"
 
-import ctypes
-CHCP = ctypes.windll.kernel32.GetConsoleCP()
+CHCP = 65001
+if os.name == 'nt':
+    import ctypes
+    CHCP = ctypes.windll.kernel32.GetConsoleCP()
 
 def print_encoded(text):
-    print(text.encode("utf-8" if CHCP == 65001 else "unicode-escape"))
+    print(text.encode("unicode-escape").decode("latin1") if CHCP != 65001 else text)
 
 def search_resource(path, name):
     files = glob.glob(os.path.join(path, "**", name), recursive = True)
@@ -38,113 +40,110 @@ def search_resource(path, name):
 def normalize_n(line, into_csv_n = False):
     return line.replace('\r', '') if into_csv_n else line.replace('\n', '\r\n')
 
-def translate_attribute_of_command(command, value) -> bool:
+def translate_attribute_of_command(command, values_dict) -> bool:
     is_translated = False
-    try:
-        if isinstance(command, commands.Choices):
-            for i, line in enumerate(command.text):
-                if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                    command.text[i] = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.CommonEvent):
-            if not MODE_REPACK_CE_PARAMS or MODE_CEARG_AS_STRING: return False
-            for i, line in enumerate(command.text):
-                if len(MODE_REPACK_CE_ARG_N):
-                    for j, evid in enumerate(MODE_REPACK_CE_EVID):
-                        if command.args[1] == evid or evid == -1:
-                            if i + 1 == MODE_REPACK_CE_ARG_N[j] and (
-                                    line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                                command.text[i] = normalize_n(value[1])
+    if isinstance(command, commands.Choices):
+        for i, line in enumerate(command.text):
+            if line in values_dict and values_dict[line]:
+                command.text[i] = values_dict[line]
+                is_translated = True
+    elif isinstance(command, commands.CommonEvent):
+        if not MODE_REPACK_CE_PARAMS or MODE_CEARG_AS_STRING: return False
+        for i, line in enumerate(command.text):
+            if len(MODE_REPACK_CE_ARG_N):
+                for j, evid in enumerate(MODE_REPACK_CE_EVID):
+                    if command.args[1] == evid or evid == -1:
+                        if i + 1 == MODE_REPACK_CE_ARG_N[j] and (
+                                line in values_dict and values_dict[line]):
+                            command.text[i] = normalize_n(values_dict[line])
+                            is_translated = True
+                            break
+            elif line in values_dict and values_dict[line]:
+                command.text[i] = values_dict[line]
+                is_translated = True
+    elif isinstance(command, commands.CommonEventByName):
+        if not MODE_REPACK_CEBN_PARAMS or MODE_CEARG_AS_STRING: return False
+        for i, line in enumerate(command.text):
+            if len(MODE_REPACK_CEBN_ARG_N):
+                for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
+                    if command.args[1] == nevid or nevid == -1:
+                        if i + 1 == MODE_REPACK_CEBN_ARG_N[j]:
+                            if line in values_dict and values_dict[line]:
+                                command.text[i] = normalize_n(values_dict[line])
                                 is_translated = True
                                 break
-                elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                    command.text[i] = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.CommonEventByName):
-            if not MODE_REPACK_CEBN_PARAMS or MODE_CEARG_AS_STRING: return False
-            for i, line in enumerate(command.text):
-                if len(MODE_REPACK_CEBN_ARG_N):
-                    for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
-                        if command.args[1] == nevid or nevid == -1:
-                            if i + 1 == MODE_REPACK_CEBN_ARG_N[j] and (
-                                    line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                                command.text[i] = normalize_n(value[1])
-                                is_translated = True
-                                break
-                elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                    command.text[i] = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.Database):
-            if (command.text and (command.text == value[0] or normalize_n(command.text, True) == value[0])) and value[1]:
-                command.text = normalize_n(value[1])
+            elif line in values_dict and values_dict[line]:
+                command.text[i] = normalize_n(values_dict[line])
                 is_translated = True
-            for i, line in enumerate(command.string_args):
-                if (command.string_args[i] and (line == value[0] or normalize_n(line, True) == value[0])) and value[1]:
-                    command.string_args[i] = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.StringCondition):
-            for i, line in enumerate(command.string_args):
-                if (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                    command.string_args[i] = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.Picture):
-            if command.ptype == "text":
-                if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-                    command.text = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.SetString):
-            if MODE_SETSTRING_AS_STRING: return False
-            if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-                command.text = normalize_n(value[1])
+    elif isinstance(command, commands.Database):
+        line = command.text
+        if line in values_dict and values_dict[line]:
+            command.text = values_dict[line]
+            is_translated = True
+        for i, line in enumerate(command.string_args):
+            if line in values_dict and values_dict[line]:
+                command.string_args[i] = values_dict[line]
                 is_translated = True
-    except Exception as e:
-        print_encoded(command.text)
-        raise e
+    elif isinstance(command, commands.StringCondition):
+        for i, line in enumerate(command.string_args):
+            if line in values_dict and values_dict[line]:
+                command.string_args[i] = values_dict[line]
+                is_translated = True
+    elif isinstance(command, commands.Picture):
+        if command.ptype == "text":
+            line = command.text
+            if line in values_dict and values_dict[line]:
+                command.text = values_dict[line]
+                is_translated = True
+    elif isinstance(command, commands.SetString):
+        if MODE_SETSTRING_AS_STRING: return False
+        line = command.text
+        if line in values_dict and values_dict[line]:
+            command.text = values_dict[line]
+            is_translated = True
+
     return is_translated
 
 def translate_string_of_command(command, value) -> bool:
     is_translated = False
-    try:
-        if isinstance(command, commands.Message):
-            if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-                command.text = normalize_n(value[1])
+
+    if isinstance(command, commands.Message):
+        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
+            command.text = normalize_n(value[1])
+            is_translated = True
+    elif isinstance(command, commands.SetString):
+        if not MODE_SETSTRING_AS_STRING: return False
+        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
+            command.text = normalize_n(value[1])
+            is_translated = True
+    elif isinstance(command, commands.CommonEvent):
+        if not MODE_REPACK_CE_PARAMS or not MODE_CEARG_AS_STRING: return False
+        for i, line in enumerate(command.text):
+            if len(MODE_REPACK_CE_ARG_N):
+                for j, evid in enumerate(MODE_REPACK_CE_EVID):
+                    if command.args[1] == evid or evid == -1:
+                        if i + 1 == MODE_REPACK_CE_ARG_N[j] and (
+                                line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                            command.text[i] = normalize_n(value[1])
+                            is_translated = True
+                            break
+            elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                command.text[i] = normalize_n(value[1])
                 is_translated = True
-        elif isinstance(command, commands.SetString):
-            if not MODE_SETSTRING_AS_STRING: return False
-            if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-                command.text = normalize_n(value[1])
+    elif isinstance(command, commands.CommonEventByName):
+        if not MODE_REPACK_CEBN_PARAMS or not MODE_CEARG_AS_STRING: return False
+        for i, line in enumerate(command.text):
+            if len(MODE_REPACK_CEBN_ARG_N):
+                for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
+                    if command.args[1] == nevid or nevid == -1:
+                        if i + 1 == MODE_REPACK_CEBN_ARG_N[j] and (
+                                line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                            command.text[i] = normalize_n(value[1])
+                            is_translated = True
+                            break
+            elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
+                command.text[i] = normalize_n(value[1])
                 is_translated = True
-        elif isinstance(command, commands.CommonEvent):
-            if not MODE_REPACK_CE_PARAMS or not MODE_CEARG_AS_STRING: return False
-            for i, line in enumerate(command.text):
-                if len(MODE_REPACK_CE_ARG_N):
-                    for j, evid in enumerate(MODE_REPACK_CE_EVID):
-                        if command.args[1] == evid or evid == -1:
-                            if i + 1 == MODE_REPACK_CE_ARG_N[j] and (
-                                    line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                                command.text[i] = normalize_n(value[1])
-                                is_translated = True
-                                break
-                elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                    command.text[i] = normalize_n(value[1])
-                    is_translated = True
-        elif isinstance(command, commands.CommonEventByName):
-            if not MODE_REPACK_CEBN_PARAMS or not MODE_CEARG_AS_STRING: return False
-            for i, line in enumerate(command.text):
-                if len(MODE_REPACK_CEBN_ARG_N):
-                    for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
-                        if command.args[1] == nevid or nevid == -1:
-                            if i + 1 == MODE_REPACK_CEBN_ARG_N[j] and (
-                                    line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                                command.text[i] = normalize_n(value[1])
-                                is_translated = True
-                                break
-                elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                    command.text[i] = normalize_n(value[1])
-                    is_translated = True
-    except Exception as e:
-        print_encoded(command.text)
-        raise e
     return is_translated
 
 def get_context(command):
@@ -160,14 +159,22 @@ def remove_ext(name):
 def read_string_translations(name, ext=''):
     name = remove_ext(name)
     name = make_postfixed_name(name, ext + STRINGS_DB_POSTFIX)
-    #print_encoded("Parsing " + name)
+    #print("Parsing " + name)
     return [line for line in read_csv_list(name) if line[0][:len(COMMENT_TAG)] != COMMENT_TAG]
 
 def read_attribute_translations(name, ext=''):
     name = remove_ext(name)
     name = make_postfixed_name(name, ext + ATTRIBUTES_DB_POSTFIX)
-    #print_encoded("Parsing " + name)
-    return [line for line in read_csv_list(name) if line[0][:len(COMMENT_TAG)] != COMMENT_TAG]
+    #print("Parsing " + name)
+    ret = {}
+    for line in read_csv_list(name):
+        if line[0][:len(COMMENT_TAG)] == COMMENT_TAG: continue
+        try:
+            ret.update({line[0]: line[1]})
+            ret.update({normalize_n(line[0]): line[1]})
+        except Exception as e:
+            print(line, e)
+    return ret
 
 def replace_tags(arr, repl_arr):
     if len(arr) == 0:
@@ -230,6 +237,8 @@ def main():
     MODE_REPACK_CEBN_EVID = [int(i.split('|')[1]) if len(i.split('|'))>1 else -1 for i in MODE_REPACK_CEBN_ARG_N if len(i.split('|'))>1]
     MODE_REPACK_CEBN_ARG_N = [int(i.split('|')[0]) for i in MODE_REPACK_CEBN_ARG_N]
 
+    MODE_BREAK_ON_EXCEPTIONS = False
+
     filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
 
     work_dir = os.getcwd()
@@ -243,12 +252,15 @@ def main():
     #maps_cache = dict()
     print("Translating maps...")
     for map_name in map_names:
-        print_encoded(f"Translating {map_name}...")
-        try:
+        print(f"Translating {map_name}...")
+        if MODE_BREAK_ON_EXCEPTIONS:
             mp = maps.Map(map_name)
-        except Exception as e:
-            print(f"FAILED: {e}")
-            continue
+        else:
+            try:
+                mp = maps.Map(map_name)
+            except Exception as e:
+                print(f"FAILED: {e}")
+                continue
         #maps_cache[map_name] = mp
         strs = read_string_translations(map_name, ".mps")
         attrs = read_attribute_translations(map_name, ".mps")
@@ -256,12 +268,11 @@ def main():
         for event in mp.events:
             for page in event.pages:
                 for i, command in enumerate(page.commands):
-                    for at in attrs:
-                        if not at: continue
-                        tr_b |= translate_attribute_of_command(command, at)
+                    tr_b |= translate_attribute_of_command(command, attrs)
                     for j, _s in enumerate(strs):
                         if not _s: continue
                         if translate_string_of_command(command, _s):
+                            strs[j] = None
                             tr_b = True
                             break
         if tr_b:
@@ -271,27 +282,33 @@ def main():
 
     print("Translating common events...")
     commonevents_name = commonevents_name[0]
-    ce = common_events.CommonEvents(commonevents_name)
+    if MODE_BREAK_ON_EXCEPTIONS:
+        ce = common_events.CommonEvents(commonevents_name)
+    else:
+        try:
+            ce = common_events.CommonEvents(commonevents_name)
+        except Exception as e:
+            print(f"FAILED: {e}")
+            sys.exit(1)
     strs = read_string_translations(commonevents_name, ".dat")
-    l_strs = len(strs)
     attrs = read_attribute_translations(commonevents_name, ".dat")
-    l_attrs = len(attrs)
+    l_strs = len(strs)
+    #l_attrs = len(attrs)
     print_progress(0, 100)
-    l_events = sum(1 for _ in ce.events)
+    #l_events = sum(1 for _ in ce.events)
     li = 0
     tr_b = False
+
     for event in ce.events:
-        for i, command in enumerate(event.commands):
-            for at in attrs:
-                if not at: continue
-                tr_b != translate_attribute_of_command(command, at) # can have many repeating attrs
+        for command in event.commands:
+            tr_b |= translate_attribute_of_command(command, attrs)
             for j, _s in enumerate(strs):
-                if not _s: continue #in case of db/csv inconsistency we can't just start from the last
+                if not _s: continue
                 if translate_string_of_command(command, _s):
                     li += 1
                     strs[j] = None # there's only one translation per string in csv, non-repeating
                     tr_b = True
-                    print_progress(li / l_strs * 100, 100) #last string should corespond to final event
+                    print_progress(li / l_strs * 100, 100)
                     break
     print_progress(100, 100)
     if tr_b:
@@ -306,47 +323,53 @@ def main():
         if not os.path.isfile(db_name.replace(".project", ".dat")):
             print("No .dat file for", db_name)
             continue
-        try:
+        if MODE_BREAK_ON_EXCEPTIONS:
             db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
-        except Exception as e:
-            print("Skipping", db_name, "due to error:\n", e,"\n")
-            continue
+        else:
+            try:
+                db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
+            except Exception as e:
+                print("Skipping", db_name, "due to error:\n", e,"\n")
+                continue
         attrs = read_attribute_translations(db_name, ".dat")
         for t in db.types:
             for i, d in enumerate(t.data):
                 if MODE_REPACK_DB_NAMES and hasattr(d, "name"):
-                    for at in attrs:
-                        if not at: continue
-                        if (d.name == at[0] or normalize_n(d.name, True) == at[0]) and at[1]:
-                            #print(t.data[i], d.name, at[1])
-                            t.data[i].name = at[1].replace('\r', '').replace('\n', '\r\n')
+                    if d.name in attrs and attrs[d.name]:
+                        #print(t.data[i], d.name, at[1])
+                        t.data[i].name =  attrs[d.name].replace('\r', '').replace('\n', '\r\n')
                 for j, l in enumerate(d.each_translatable()):
-                    for at in attrs:
-                        if not at: continue
-                        if (l[0] == at[0] or normalize_n(l[0], True) == at[0]) and at[1]:
-                            #print(t.data[i], l[0], at[1])
-                            t.data[i].set_field(l[1], at[1].replace('\r', '').replace('\n', '\r\n'))
+                    if l[0] in attrs and attrs[l[0]]:
+                        #print(t.data[i], l[0], at[1])
+                        t.data[i].set_field(l[1],  attrs[l[0]].replace('\r', '').replace('\n', '\r\n'))
         out_name = make_out_name(db_name, work_dir)
         db.write(out_name, remove_ext(out_name) + '.dat')
         if ENABLE_YAML_DUMPING:
             yaml_dump.dump(db, remove_ext(db_name))
 
     dat_name = dat_name[0]
-    attrs = [] #read_attribute_translations(dat_name, ".dat")
+    attrs = read_attribute_translations(dat_name, ".dat")
     if len(attrs):
-        print("Translating game dat file...")
-        gd = gamedats.GameDat(dat_name)
+        print(f"Translating game dat file {dat_name}...")
+        if MODE_BREAK_ON_EXCEPTIONS:
+            gd = gamedats.GameDat(dat_name)
+        else:
+            try:
+                gd = gamedats.GameDat(dat_name)
+            except Exception as e:
+                print("Skipping", db_name, "due to error:\n", e,"\n")
+                sys.exit(1)
         for a in attrs:
-            if gd.title and gd.title == a[0] and a[1]:
-                gd.title = a[1]
-            if gd.version and gd.version == a[0] and a[1]:
-                gd.version = a[1]
-            if gd.font and gd.font == a[0] and a[1]:
-                gd.font = a[1]
+            if gd.title in attrs and attrs[gd.title]:
+                gd.title = attrs[gd.title]
+            if gd.version and gd.version in attrs and attrs[gd.version]:
+                gd.version = attrs[gd.version]
+            if gd.font in attrs and attrs[gd.font]:
+                gd.font = attrs[gd.font]
             if gd.subfonts:
                 for i, font in enumerate(gd.subfonts):
-                    if font == a[0] and a[1]:
-                        gd.subfonts[i] = a[1]
+                    if font  in attrs and attrs[font]:
+                        gd.subfonts[i] = attrs[font]
         gd.write(make_out_name(dat_name, work_dir))
 
 if __name__ == "__main__":

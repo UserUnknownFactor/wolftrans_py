@@ -4,94 +4,99 @@ from .common_events import CommonEvents
 from .route import RouteCommand
 from .commands import Command
 from .debuging import *
-import os#, re
-
-EXCEPT_NO_EVENTS = True
+import os#, io#, re
 
 class Map():
-    #attr_reader :tileset_id
-    #attr_reader :width
-    #attr_reader :height
-    #attr_reader :events
+    MAP_MAGIC = b'\0\0\0\0\0\0\0\0\0\0WOLFM\0'
 
-    #DEBUG
-    #attr_reader :filename
-
-    MAP_MAGIC_JP2 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00\x00\x00\x00\x00d\x00\x00\x00e\x05\x00\x00\x00\x82\xc8\x82\xb5\x00'
-    MAP_MAGIC_JP3 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00U\x00\x00\x00d\x00\x00\x00f\x07\x00\x00\x00\xe3\x81\xaa\xe3\x81'
-    MAP_MAGIC_JP31 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00U\x00\x00\x00d\x00\x00\x00f\x01\x00\x00\x00\x00\x01\x00\x00\x00'
-    MAP_MAGIC_EN2 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00WOLFM\x00\x00\x00\x00\x00\x64\x00\x00\x00\x65\x03,\x00\x00\x00\x4e\x6f\x00'
+    MAP_EVENT_MARKER = 0x6F
+    MAP_TERMINATOR = 0x66
 
     def __init__(self, filename):
         self.filename = filename
-        self.wolfversion = 2
-
         with FileCoder.open(filename, 'r') as coder:
             try:
-                coder.verify(self.MAP_MAGIC_JP2)
-                self.MAP_MAGIC = self.MAP_MAGIC_JP2
-            except Exception as e:
-                try:
-                    coder.verify(self.MAP_MAGIC_JP3)
-                    self.MAP_MAGIC = self.MAP_MAGIC_JP3
-                    self.wolfversion = 3
-                except:
-                    coder.verify(self.MAP_MAGIC_JP31)
-                    self.MAP_MAGIC = self.MAP_MAGIC_JP31
+                coder.verify(self.MAP_MAGIC)
+            except:
+                raise
 
+            self.is_unicode = coder.read_u4() == 85 # 'U' is UTF-8
+            coder.is_utf8 = self.is_unicode
+
+            self.attributes = coder.read_u4() # 100
+            self.version = coder.read_u1() # 100, 101, 102 etc
+            self.unknown_str = coder.read_string() # NOTE: なし = None
+
+            event_count = 0
             self.tileset_id = coder.read_u4()
-            if self.wolfversion == 3:
-                self.unk1 = coder.read_u2()
 
             # Read basic data
             self.width = coder.read_u4()
             self.height = coder.read_u4()
-            event_count = 0
-            if (self.MAP_MAGIC != self.MAP_MAGIC_JP31):
-                event_count = coder.read_u4()
-            print(f'{self.width} x {self.height}; events: {event_count}')
 
-            if EXCEPT_NO_EVENTS and event_count == 0:
-                raise Exception("no Events on the map")
-            # Read tiles
-            # TODO: interpret this data
-            tiles_length = self.width * self.height * 3 * 4
-            self.tiles = coder.read(tiles_length)
+            event_count = coder.read_u4()
+            self.no_tiles = False
+            if self.is_unicode:
+                v = coder.read_u4()
+                if v == 0xFFFFFFFF: # -1
+                    self.no_tiles = True
+                else:
+                    coder.skip(-4)
+
+            print(f'{self.width} x {self.height}; events: {event_count}' + (' (no tiles)' if self.no_tiles else ''))
 
             self.events = []
+            if event_count == 0 or event_count > 0xFFFFF: # NOTE: 1048575 events is unrealistic
+                return
+
+            if not self.no_tiles:
+                # Read tiles
+                tiles_length = self.width * self.height * 3 * 4
+                self.tiles = coder.read(tiles_length)
+
             if coder.eof:
                 return #TileMap.mps case
 
             # Read events
             indicator = coder.read_u1()
-            while indicator == 0x6F:
+            while indicator == self.MAP_EVENT_MARKER: # 111
                 self.events.append(self.Event(coder))
                 indicator = coder.read_u1()
 
-            if indicator != 0x66:
-                raise Exception(f"unexpected event indicator found: #{hex(indicator)}")
+            if indicator != self.MAP_TERMINATOR:
+                raise Exception(f"unexpected map terminator: {hex(indicator)}")
             if not coder.eof:
                 raise Exception(f"file is not fully parsed")
 
     def write(self, filename):
         with FileCoder.open(filename, 'w') as coder:
             coder.write(self.MAP_MAGIC)
+            coder.write_u4(85 if self.is_unicode else 0) # Write 'U' if is_unicode
+            coder.write_u4(self.attributes)
+            coder.write_u1(self.version)
+            coder.write_string(self.unknown_str)
+
             coder.write_u4(self.tileset_id)
-            if self.wolfversion == 3:
-                coder.write_u2(self.unk1)
 
             coder.write_u4(self.width)
             coder.write_u4(self.height)
             coder.write_u4(len(self.events))
-            coder.write(self.tiles)
+
+            if self.is_unicode:
+                if self.no_tiles:
+                    coder.write_u4(0xffffffff)
+
+            if not self.no_tiles:
+                coder.write(self.tiles)
+
             for event in self.events:
                 if not event: continue
-                coder.write_u1(0x6F)
+                coder.write_u1(self.MAP_EVENT_MARKER)
                 event.write(coder)
 
-            coder.write_u1(0x66)
+            coder.write_u1(self.MAP_TERMINATOR)
 
-    #---------------- DEBUG method that searches for a string somewhere in the map ----------------------
+    #--------DEBUG method that searches for a string somewhere in the map ----------
     #
     def grep(self, needle):
         for event in self.events:
@@ -100,7 +105,7 @@ class Map():
                     for arg in command.string_args:
                         m = re.compile(arg).match(needle)
                         if m:
-                            print( f"#{self.filename}/#{event.id}/#{page.id+1}/#{line+1}: #{command.cid}\n\t#{command.args}\n\t#{command.string_args}\n")
+                            print( f"{self.filename}/{event.id}/{page.id+1}/{line+1}: {command.cid}\n\t{command.args}\n\t{command.string_args}\n")
                             break
 
     def grep_cid(self, cid):
@@ -108,18 +113,14 @@ class Map():
             for page in event.pages:
                 for line, command in enumerate(page.commands):
                     if command.cid == cid:
-                        print(f"#{self.filename}/#{event.id}/#{page.id+1}/#{line+1}: #{command.cid}\n\t#{command.args}\n\t#{command.string_args}\n")
-    #----------------------------------------------------------------------------------------------------
+                        print(f"{self.filename}/{event.id}/{page.id+1}/{line+1}: {command.cid}\n\t{command.args}\n\t{command.string_args}\n")
+    #-------------------------------------------------------------------------------
 
     class Event():
-        #attr_accessor :id
-        #attr_accessor :name
-        #attr_accessor :x
-        #attr_accessor :y
-        #attr_accessor :pages
-
         EVENT_MAGIC1 = bytes([0x39, 0x30, 0x00, 0x00])
         EVENT_MAGIC2 = bytes([0x00, 0x00, 0x00, 0x00])
+        EVENT_MARKER = 0x79
+        EVENT_TERMINATOR = 0x70
 
         def __init__(self, coder):
             coder.verify(self.EVENT_MAGIC1)
@@ -127,21 +128,25 @@ class Map():
             self.name = coder.read_string()
             self.x = coder.read_u4()
             self.y = coder.read_u4()
-            pages_len = coder.read_u4()
-            self.pages = [None] * pages_len
+            page_count = coder.read_u4()
+            self.pages = [None] * page_count
 
             coder.verify(self.EVENT_MAGIC2)
             # Read pages
             page_id = 0
             indicator = coder.read_u1()
-            while indicator == 0x79: # 121
+            while indicator == self.EVENT_MARKER: # 121
                 page = self.Page(coder, page_id)
                 self.pages[page_id] = page
                 page_id += 1
                 indicator = coder.read_u1()
 
-            if indicator != 0x70: # 112
-                raise Exception(f"unexpected event page indicator: #{hex(indicator)}")
+            if len(self.pages) != page_count:
+                raise Exception(
+                    f"expected {page_count} pages, but read {len(self.pages)}"
+                )
+            if indicator != self.EVENT_TERMINATOR: # 112
+                raise Exception(f"unexpected event terminator: {hex(indicator)}")
 
         def write(self, coder):
             coder.write(self.EVENT_MAGIC1)
@@ -154,31 +159,14 @@ class Map():
 
             # Write pages
             for page in self.pages:
-                coder.write_u1(0x79)
+                coder.write_u1(self.EVENT_MARKER)
                 page.write(coder)
 
-            coder.write_u1(0x70)
+            coder.write_u1(self.EVENT_TERMINATOR)
 
 
         class Page():
-            #attr_accessor :id
-            #attr_accessor :unknown1
-            #attr_accessor :graphic_name
-            #attr_accessor :graphic_direction
-            #attr_accessor :graphic_frame
-            #attr_accessor :graphic_opacity
-            #attr_accessor :graphic_render_mode
-            #attr_accessor :conditions
-            #attr_accessor :movement
-            #attr_accessor :flags
-            #attr_accessor :route_flags
-            #attr_accessor :route
-            #attr_accessor :commands
-            #attr_accessor :shadow_graphic_num
-            #attr_accessor :collision_width
-            #attr_accessor :collision_height
-
-            COMMANDS_TERMINATOR = bytes([ 0x03, 0x00, 0x00, 0x00])
+            PAGE_TERMINATOR = 0x7A
 
             def __init__(self, coder, pid):
                 self.id = pid
@@ -205,24 +193,24 @@ class Map():
                 self.route_flags = coder.read_u1()
 
                 # Parse move route
-                routes_len = coder.read_u4()
-                self.route = [RouteCommand.create(coder) for _ in range(routes_len)]
+                route_count = coder.read_u4()
+                self.route = [RouteCommand.create(coder) for _ in range(route_count)]
 
                 # Parse commands
-                commands_len = coder.read_u4()
-                self.commands = [Command.create(coder) for _ in range(commands_len)]
+                command_count = coder.read_u4()
+                self.commands = [Command.create(coder) for _ in range(command_count)]
 
-                coder.verify(self.COMMANDS_TERMINATOR)
-
-                # TODO: abstract these options
+                self.features = coder.read_u4()
                 self.shadow_graphic_num = coder.read_u1()
                 self.collision_width = coder.read_u1()
                 self.collision_height = coder.read_u1()
 
-                terminator = coder.read_u1()
-                if terminator != 0x7A:
-                    raise Exception(f"page terminator not 7A (found #{hex(terminator)})")
+                if self.features > 3:
+                    self.page_transfer = coder.read_u1()
 
+                p_terminator = coder.read_u1()
+                if p_terminator != self.PAGE_TERMINATOR:
+                    raise Exception(f"unexpected page terminator: {hex(p_terminator)}")
 
             def write(self, coder):
                 coder.write_u4(self.unknown1)
@@ -239,17 +227,18 @@ class Map():
                 coder.write_u1(self.route_flags)
 
                 coder.write_u4(len(self.route))
-                for rt in self.route:
-                    rt.write(coder)
+                for pt in self.route:
+                    pt.write(coder)
 
                 coder.write_u4(len(self.commands))
                 for cmd in self.commands:
                     cmd.write(coder)
-                coder.write(self.COMMANDS_TERMINATOR)
 
+                coder.write_u4(self.features)
                 coder.write_u1(self.shadow_graphic_num)
                 coder.write_u1(self.collision_width)
                 coder.write_u1(self.collision_height)
-                coder.write_u1(0x7A)
+                if self.features > 3:
+                    coder.write_u1(self.page_transfer)
 
-
+                coder.write_u1(self.PAGE_TERMINATOR)

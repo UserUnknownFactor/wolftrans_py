@@ -13,7 +13,7 @@ class Database():
             types_len = coder.read_u4()
             self.types = [self.Type(coder) for _ in range(types_len)]
 
-        with FileCoder.open(dat_filename, 'r', self.DAT_SEED_INDICES) as coder:
+        with FileCoder.open(dat_filename, 'r', Database.DAT_SEED_INDICES, is_db=True) as coder:
             if coder.encrypted:
                 self.crypt_header = coder.crypt_header
                 self.unknown_encrypted_1 = coder.read_u1()
@@ -52,7 +52,7 @@ class Database():
             coder.write_u4(len(self.types))
             [t.write_project(coder) for t in self.types]
 
-        with FileCoder.open(dat_filename, 'w', self.DAT_SEED_INDICES, self.crypt_header) as coder:
+        with FileCoder.open(dat_filename, 'w', Database.DAT_SEED_INDICES, self.crypt_header, is_db=True) as coder:
             if coder.encrypted:
                 coder.write_u1(self.unknown_encrypted_1)
             else:
@@ -73,12 +73,6 @@ class Database():
 
 
     class Type():
-        #attr_accessor :name
-        #attr_accessor :fields
-        #attr_accessor :data
-        #attr_accessor :description
-        #attr_accessor :unknown1
-
         D_TYPE_SEPARATOR = b'\xFE\xFF\xFF\xFF'
 
         # Initialize from project file IO
@@ -164,8 +158,6 @@ class Database():
             for field in self.fields:
                 coder.write_u4(field.default_value)
 
-
-
         # Read the rest of the data from the dat file
         def read_dat(self, coder):
             coder.verify(self.D_TYPE_SEPARATOR)
@@ -195,14 +187,6 @@ class Database():
                 datum.write_dat(coder)
 
     class Field():
-        #attr_accessor :name
-        #attr_accessor :ftype
-        #attr_accessor :unknown1
-        #attr_accessor :string_args
-        #attr_accessor :args
-        #attr_accessor :default_value
-        #attr_accessor :indexinfo
-
         STRING_START = 0x07D0
         INT_START = 0x03E8
 
@@ -235,10 +219,6 @@ class Database():
 
 
     class Data():
-        #attr_accessor :name
-        #attr_accessor :int_values
-        #attr_accessor :string_values
-
         def __init__(self, coder):
             self.name = coder.read_string()
 
@@ -296,5 +276,3 @@ class Database():
                 if value and value.replace('\r','').replace('\n','').strip():
                     if ".png" in value or ".mp3" in value or ".ogg" in value or ".wav" in value: continue
                     yield (value, field)
-
-

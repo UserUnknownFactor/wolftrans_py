@@ -4,9 +4,6 @@ from .filecoder import FileCoder
 class RouteCommand():
     TERMINATOR = bytes([0x01, 0x00])
 
-    #attr_accessor :_id
-    #attr_accessor :args
-
     def __init__(self, _id, args):
         self._id = _id
         self.args = args
@@ -21,7 +18,6 @@ class RouteCommand():
 
         #TODO Create proper route command
         return RouteCommand(_id, _args)
-
 
     def write(self, coder):
         coder.write_u1(self._id)

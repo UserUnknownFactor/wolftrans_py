@@ -24,7 +24,7 @@ STRINGS_NAME = "strings"
 ATTRIBUTES_NAME = "attributes"
 STRINGS_DB_POSTFIX = "_" + STRINGS_NAME + ".csv"
 ATTRIBUTES_DB_POSTFIX = "_" + ATTRIBUTES_NAME + ".csv"
-REPLACEMENT_TAGS_RE = r'(?:「|」|(?:(?:\\[-\+_\.\{\}%A-Za-z\d]+\[[\d:-_]+\]){1,}|\\[A-Za-z\d<>]+))'
+REPLACEMENT_TAGS_RE = r'(?:「|」|[@]\d+\n|(?:(?:\\[-\+_\.\{\}%A-Za-z\d]+\[[\d:-_]+\]){1,}|\\[A-Za-z\d<>]+))'
 MEDIA_EXTENSION_RE = re.compile(r'\.(?:png|wave?|aac|jpe?g|ogg|mp3|flac|webp)$')
 
 
@@ -166,6 +166,7 @@ def main():
     MODE_EXTRACT_CE = args.c
     MODE_EXTRACT_CE_BY_NAME =  args.b
     MODE_EXTRACT_DATABASE_REFS = args.d
+    MODE_BREAK_ON_EXCEPTIONS = False
 
     """
     MODE_EXTRACT_CE_ARG_N = [] if not args.ea or args.ea == "0" else args.ea.split(',')
@@ -196,11 +197,14 @@ def main():
         print("Extracting",os.path.basename(map_name) +"...")
         translatable_attrs = dict()
         translatable_strings = []
-        try:
+        if MODE_BREAK_ON_EXCEPTIONS:
             mp = maps.Map(map_name)
-        except Exception as e:
-            print(f"FAILED: {e}")
-            continue
+        else:
+            try:
+                mp = maps.Map(map_name)
+            except Exception as e:
+                print(f"FAILED: {e}")
+                continue
         #maps_cache[map_name] = mp
         for event in mp.events:
             for page in event.pages:
@@ -224,11 +228,14 @@ def main():
             os.path.isfile(make_postfixed_name(commonevents_name, ATTRIBUTES_DB_POSTFIX, ".dat")) or (
                 os.path.isfile(make_postfixed_name(commonevents_name, STRINGS_DB_POSTFIX, ".dat")))):
         print("Extracting",os.path.basename(commonevents_name) +"...")
-        try:
+        if MODE_BREAK_ON_EXCEPTIONS:
             ce = common_events.CommonEvents(commonevents_name)
-        except Exception as e:
-            print(e)
-            sys.exit(2)
+        else:
+            try:
+                ce = common_events.CommonEvents(commonevents_name)
+            except Exception as e:
+                print(e)
+                sys.exit(2)
         translatable_attrs = dict()
         translatable_strings = []
         for event in ce.events:
@@ -253,11 +260,14 @@ def main():
         base_name = os.path.basename(db_name)
         print("Extracting", base_name + "...")
         db_name_only = remove_ext(os.path.basename(db_name))
-        try:
+        if MODE_BREAK_ON_EXCEPTIONS:
             db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
-        except Exception as e:
-            print(e)
-            break
+        else:
+            try:
+                db = databases.Database(db_name, os.path.join(os.path.dirname(db_name),  db_name_only + ".dat"))
+            except Exception as e:
+                print(e)
+                continue
         translatable = []
         test_a = set()
         for t in db.types:
@@ -287,10 +297,13 @@ def main():
     if len(dat_name): dat_name = dat_name[0]
     if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
         print("Extracting",os.path.basename(dat_name) +"...")
-        try:
+        if MODE_BREAK_ON_EXCEPTIONS:
             gd = gamedats.GameDat(dat_name)
-        except Exception as e:
-            print(e)
+        else:
+            try:
+                gd = gamedats.GameDat(dat_name)
+            except Exception as e:
+                print(e)
             sys.exit(2)
         translatable = []
         if gd.title:

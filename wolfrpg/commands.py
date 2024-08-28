@@ -36,12 +36,12 @@ CID_TO_CLASS = {
     173: 'EraseEvent',
     174: 'ReturnToTitle',
     175: 'EndGame',
-    176: 'StartNonPic', # wtf?
+    176: 'StartLoop2',
     177: 'StopNonPic',
     178: 'ResumeNonPic',
     179: 'LoopTimes',
     180: 'Wait',
-    201: 'Move',  # special case
+    201: 'Move', # special case
     202: 'WaitForMove',
     210: 'CommonEvent',
     211: 'CommonEventReserve',
@@ -67,6 +67,8 @@ CID_TO_CLASS = {
     421: 'CancelCase',
     498: 'LoopEnd',
     499: 'BranchEnd',
+    999: 'Default',
+   -1: 'Invalid'
 }
 
 
@@ -283,7 +285,7 @@ class EndGame(Command):
 class LoopToStart(Command):
     pass
 
-class StartNonPic(Command):
+class StartLoop2(Command):
     pass
 
 class StopNonPic(Command):
@@ -305,7 +307,6 @@ class Move(Command):
         # Read unknown data
         self.unknown = [coder.read_u1() for i in range(5)]
         # Read known data
-        # TODO: further abstract this
         self.flags = coder.read_u1()
 
         # Read route
@@ -318,8 +319,8 @@ class Move(Command):
             coder.write_u1(b)
         coder.write_u1(self.flags)
         coder.write_u4(len(self.route))
-        for cmd in self.route:
-            cmd.write(coder)
+        for pt in self.route:
+            pt.write(coder)
 
 class WaitForMove(Command):
     pass
@@ -411,4 +412,7 @@ class LoopEnd(Command):
     pass
 
 class BranchEnd(Command):
+    pass
+
+class Default(Command):
     pass

@@ -2,7 +2,7 @@
 import sys, os, glob, re
 if sys.version_info < (3, 9): print("This app must run using Python 3.9+"), sys.exit(2)
 from wolfrpg import commands, maps, databases, gamedats, common_events, filecoder
-from wolfrpg.service_fn import write_csv_list, read_csv_dict
+from wolfrpg.service_fn import write_csv_list, read_csv_dict, normalize_n, is_translatable
 from wolfrpg import  yaml_dump
 import hashlib
 
@@ -45,9 +45,6 @@ def search_resource(path, name):
     files = glob.glob(os.path.join(path, "**", name), recursive = True)
     return files if len(files) else []
 
-def is_translatable(text):
-    return len(text.replace('\r','').replace('\n','').strip()) > 0 and '\u25A0' != text
-
 def extract_previous(filename, textarr):
     old = read_csv_dict(filename.replace(".csv", ".old"))
     if not len(old): return
@@ -56,45 +53,50 @@ def extract_previous(filename, textarr):
             textarr[i][1] = old[a[0]]
     return textarr
 
+def normalize_and_filter(text):
+    if isinstance(text, str):
+        return [normalize_n(text)] if is_translatable(text) else []
+    elif isinstance(text, list):
+        return [normalize_n(i) for i in text if is_translatable(i)]
+    return []
+
 def attributes_of_command(command):
     if isinstance(command, commands.Choices):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)]
+        return normalize_and_filter(command.text)
     elif isinstance(command, commands.CommonEvent):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
-            not MODE_CEARG_AS_STRING and MODE_EXTRACT_CE) else []
+        if not MODE_CEARG_AS_STRING and MODE_EXTRACT_CE:
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.CommonEventByName):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
-            not MODE_CEARG_AS_STRING and MODE_EXTRACT_CE_BY_NAME) else []
+        if not MODE_CEARG_AS_STRING and MODE_EXTRACT_CE_BY_NAME:
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.Database):
         if MODE_EXTRACT_DATABASE_REFS:
-            texts = [command.text.replace('\r', '')] if is_translatable(command.text) else []
-            texts += [i.replace('\r', '') for i in command.string_args if is_translatable(i)]
-            return texts
-        return []
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.StringCondition):
-        return [i.replace('\r', '') for i in command.string_args if is_translatable(i)]
+        return normalize_and_filter(command.text)
     elif isinstance(command, commands.Picture):
         if command.ptype == 'text':
-            return [command.text.replace('\r', '')] if is_translatable(command.text) else []
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.SetString):
-        return [command.text.replace('\r', '')] if (
-            not MODE_SETSTRING_AS_STRING and is_translatable(command.text)) else []
+        if not MODE_SETSTRING_AS_STRING:
+            return normalize_and_filter(command.text)
     return []
 
 def strings_of_command(command):
     if isinstance(command, commands.Message):
-        return [command.text.replace('\r', '')] if is_translatable(command.text) else []
+        return normalize_and_filter(command.text)
     elif isinstance(command, commands.Comment):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if MODE_EXTRACT_COMMENTS else []
+        if MODE_EXTRACT_COMMENTS:
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.SetString):
-        return [command.text.replace('\r', '')] if (
-            MODE_SETSTRING_AS_STRING and is_translatable(command.text)) else []
+        if MODE_SETSTRING_AS_STRING:
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.CommonEvent):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
-            MODE_CEARG_AS_STRING and MODE_EXTRACT_CE) else []
+        if MODE_CEARG_AS_STRING and MODE_EXTRACT_CE:
+            return normalize_and_filter(command.text)
     elif isinstance(command, commands.CommonEventByName):
-        return [i.replace('\r', '') for i in command.text if is_translatable(i)] if (
-            MODE_CEARG_AS_STRING and MODE_EXTRACT_CE_BY_NAME) else []
+        if MODE_CEARG_AS_STRING and MODE_EXTRACT_CE_BY_NAME:
+            return normalize_and_filter(command.text)
     return []
 
 def get_context(command):
@@ -166,6 +168,7 @@ def main():
     MODE_EXTRACT_CE = args.c
     MODE_EXTRACT_CE_BY_NAME =  args.b
     MODE_EXTRACT_DATABASE_REFS = args.d
+
     MODE_BREAK_ON_EXCEPTIONS = False
 
     """

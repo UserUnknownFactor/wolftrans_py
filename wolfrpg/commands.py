@@ -78,9 +78,38 @@ class Command:
         self.args = args
         self.string_args = string_args
         self.indent = indent
+        self._has_text = False
+        self._text_index = None
 
     def terminate_stream(self, coder):
         coder.write_terminator()
+
+    def is_text_line(self, line_index):
+        if self._text_index is not None and self._text_index != line_index:
+            return False
+        return True
+
+    @property
+    def text(self):
+        if self._has_text:
+            if self._text_index is not None:
+                if len(self.string_args) > self._text_index:
+                    return self.string_args[self._text_index]
+                else:
+                    return ''
+            else:
+                return self.string_args
+        return None
+
+    @text.setter
+    def text(self, value):
+        if self._has_text:
+            if self._text_index is not None: # this assumes a single value
+                # TODO: is list of indexes needed?
+                if len(self.string_args) > self._text_index:
+                    self.string_args[self._text_index] = value
+            else:
+                self.string_args = value
 
     @staticmethod
     def create(coder):
@@ -130,31 +159,31 @@ class Checkpoint(Command):
     pass
 
 class Message(Command):
-    @property
-    def text(self):
-        return self.string_args[0]
-
-    @text.setter
-    def text(self, value):
-        self.string_args[0] = value
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        self._text_index = 0
 
 class Choices(Command):
-    @property
-    def text(self):
-        return self.string_args
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        self._text_index = None
 
 class Comment(Command):
-    @property
-    def text(self):
-        return self.string_args
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        self._text_index= None
 
 class ForceStopMessage(Command):
     pass
 
 class DebugMessage(Command):
-    @property
-    def text(self):
-        return self.string_args[0]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        self._text_index= 0
 
 class ClearDebugText(Command):
     pass
@@ -163,23 +192,19 @@ class VariableCondition(Command):
     pass
 
 class StringCondition(Command):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        self._text_index= None
 
 class SetVariable(Command):
     pass
 
 class SetString(Command):
-    @property
-    def text(self):
-        if len(self.string_args) > 0:
-            return self.string_args[0]
-        else:
-            return ''
-
-    @text.setter
-    def text(self, value):
-        if len(self.string_args) > 0:
-            self.string_args[0] = value
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        self._text_index= 0
 
 class InputKey(Command):
     pass
@@ -200,8 +225,11 @@ class Sound(Command):
     pass
 
 class Picture(Command):
-    def __init__(self, cid, args, string_args, indent):
-        super().__init__(cid, args, string_args, indent)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = self.ptype == 'text'
+        if self._has_text:
+            self._text_index = 0
 
     @property
     def ptype(self):
@@ -221,23 +249,6 @@ class Picture(Command):
 
     def pnum(self):
         return self.args[1]
-
-    @property
-    def text(self):
-        if self.ptype != 'text':
-            return None
-            #raise Exception(f"picture type #{self.ptype} has no text")
-        return '' if not self.string_args or (len(self.string_args) == 0) else self.string_args[0]
-
-    @text.setter
-    def text(self, value):
-        if self.ptype != 'text':
-            raise Exception(f"picture type #{self.ptype} has no text")
-
-        if not self.string_args or (len(self.string_args) == 0):
-            self.string_args = list(value)
-        else:
-            self.string_args[0] = value
 
     @property
     def filename(self):
@@ -326,9 +337,9 @@ class WaitForMove(Command):
     pass
 
 class CommonEvent(Command):
-    @property
-    def text(self):
-        return self.string_args
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = len(self.string_args) > 0
 
 class CommonEventReserve(Command):
     pass
@@ -364,17 +375,10 @@ class ChipOverwrite(Command):
     pass
 
 class Database(Command):
-    @property
-    def text(self):
-        if len(self.string_args) > 2:
-            return self.string_args[2]
-        else:
-            return ''
-
-    @text.setter
-    def text(self, value):
-        if len(self.string_args) > 2:
-            self.string_args[2] = value
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = True
+        #self._text_index = 2 # NOTE: Nope?
 
 class ImportDatabase(Command):
     pass
@@ -392,9 +396,9 @@ class Effect(Command):
     pass
 
 class CommonEventByName(Command):
-    @property
-    def text(self):
-        return self.string_args
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._has_text = len(self.string_args) > 0
 
 class ChoiceCase(Command):
     pass

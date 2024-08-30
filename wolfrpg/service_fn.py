@@ -1,13 +1,12 @@
-import re, csv
+import re, csv, os
 from sys import stdin
-from os import get_terminal_size, path
 from time import sleep
 
 USE_COLORAMA = False
 TERMINAL_SIZE = 0
 PROGRESS_BAR_LEN = 0
 try:
-    TERMINAL_SIZE = (get_terminal_size().columns - 2) if stdin.isatty() else 0
+    TERMINAL_SIZE = (os.get_terminal_size().columns - 2) if stdin.isatty() else 0
     PROGRESS_BAR_LEN = TERMINAL_SIZE - 20
 except:
     pass
@@ -38,6 +37,7 @@ csv.register_dialect(DIALECT_TRANSLATION, delimiter=DELIMITER_CHAR, quotechar='\
 
 LAST_NEWLINE_RE = re.compile(r"([^\n])[\n]$")
 
+
 def chomp(x):
     """ Removes last linebreak after a character """
     LAST_NEWLINE_RE.sub(r'\1', x)
@@ -49,7 +49,7 @@ def num_groups(aregex):
     return re.compile(aregex).groups
 
 
-def merge_dicts(*dict_args):
+def merge_dicts(*dict_args) -> dict:
     """ Merges several dict()s """
     result = {}
     for dictionary in dict_args:
@@ -73,9 +73,9 @@ def preprocess_out(lst, replace_cr):
             yield row
 
 
-def read_csv_list(fn, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER):
+def read_csv_list(fn, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER) -> list:
     """ Reads CSV array in a->b->... format """
-    if path.isfile(fn):
+    if os.path.isfile(fn):
         with open(fn, 'r', newline='', encoding=CSV_ENCODING) as f:
             return list(x for x in csv.reader(preprocess_in(f, replace_cr), ftype) if len(x) > 0)
     else:
@@ -91,21 +91,20 @@ def write_csv_list(fn, lst, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACE
             writer.writerow(row)
 
 
-def read_csv_dict(fn, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER):
+def read_csv_dict(fn, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER) -> dict:
     """ Reads CSV dictionary in a->b format """
-    if path.isfile(fn):
+    if os.path.isfile(fn):
         with open(fn, 'r', newline='', encoding=CSV_ENCODING) as f:
             # the function will ignore columns after second
             return {item[0]: item[1] for item in csv.reader(preprocess_in(f, replace_cr), ftype) if len(item) > 1}
     else:
         return dict()
 
-
 #def string_unescape(s, enc="utf-8"):
 #    return (bytes(s.encode("latin-1", "backslashreplace").decode("unicode_escape"), encoding=enc).decode(enc))
-def string_unescape(s, encoding="utf-8"):
-    """ Unescapes backslash-escaped character sequences in strings """
 
+def string_unescape(s: str, encoding: str="utf-8") -> str:
+    """ Unescapes backslash-escaped character sequences in strings """
     """
     sarray = ESCAPECHARS_RE.split(s)
     for i, si in enumerate(sarray):
@@ -114,7 +113,6 @@ def string_unescape(s, encoding="utf-8"):
     return ''.join(sarray)
     """
     return s.encode(encoding).decode( 'unicode-escape' )
-
 
 
 def print_progress(index, total, type_of_progress=0, start_from=0, end_with=100, title=''):
@@ -161,3 +159,40 @@ def print_progress(index, total, type_of_progress=0, start_from=0, end_with=100,
     if end_with == 100 and round(percent_done) >= end_with:
         sleep(.3)
         print((' '  * (TERMINAL_SIZE-2)),  end='\r', flush=True) # cleanup line
+
+CHCP = 65001
+if os.name == 'nt':
+    import ctypes
+    CHCP = ctypes.windll.kernel32.GetConsoleCP()
+
+def print_encoded(text: str):
+    print(text.encode("unicode-escape").decode("latin1") if CHCP != 65001 else text)
+
+def search_resource(path: str, name: str) -> list:
+    import glob
+    files = glob.glob(os.path.join(path, "**", name), recursive = True)
+    return files if len(files) else []
+
+def is_translatable(text: str) -> bool:
+    return isinstance(text, str) and len(text.replace('\r','').replace('\n','').strip()) > 0 and '\u25A0' != text
+
+def normalize_n(line: str, into_csv:bool=False) -> str:
+    """
+    Normalize the newline characters in a string.
+
+    Args:
+        line (`str`): The string to be normalized
+
+        into_csv (`bool`):
+
+            If `True`, to Unix-style
+
+            If `False` (default), to Windows-style
+
+    Returns:
+        str: normalized string
+    """
+    if into_csv:
+        return line.replace('\r', '')
+    else:
+        return line.replace('\n', '\r\n')

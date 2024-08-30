@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-import sys, os, glob, re
+import sys, os
 if sys.version_info < (3, 9): print("This app must run using Python 3.9+"), sys.exit(2)
 from wolfrpg import commands, maps, databases, gamedats, common_events, filecoder
-from wolfrpg.service_fn import read_csv_list, print_progress
 from wolfrpg import yaml_dump
+from wolfrpg.service_fn import *
+from wolfrpg.simple_trie import *
 
+DROP_EMTPY = False
 ENABLE_YAML_DUMPING = False
 
 MODE_ALLOW_COMMENTS = False
@@ -25,126 +27,138 @@ ATTRIBUTES_DB_POSTFIX = "_" + ATTRIBUTES_NAME + ".csv"
 DEFAULT_OUT_DIR = "translation_out"
 COMMENT_TAG = "//"
 
-CHCP = 65001
-if os.name == 'nt':
-    import ctypes
-    CHCP = ctypes.windll.kernel32.GetConsoleCP()
+def is_string_command(command):
+    return isinstance(command, (commands.Message, commands.SetString)) or \
+           (isinstance(command, commands.CommonEvent) and MODE_REPACK_CE_PARAMS and MODE_CEARG_AS_STRING) or \
+           (isinstance(command, commands.CommonEventByName) and MODE_REPACK_CEBN_PARAMS and MODE_CEARG_AS_STRING)
 
-def print_encoded(text):
-    print(text.encode("unicode-escape").decode("latin1") if CHCP != 65001 else text)
+def is_attribute_command(command):
+    return isinstance(command, (commands.Choices, commands.StringCondition, commands.Picture,
+                                commands.Database)) or \
+           (isinstance(command, commands.CommonEvent) and MODE_REPACK_CE_PARAMS and not MODE_CEARG_AS_STRING) or \
+           (isinstance(command, commands.CommonEventByName) and MODE_REPACK_CEBN_PARAMS and not MODE_CEARG_AS_STRING) or \
+           (isinstance(command, commands.SetString) and not MODE_SETSTRING_AS_STRING)
 
-def search_resource(path, name):
-    files = glob.glob(os.path.join(path, "**", name), recursive = True)
-    return files if len(files) else []
+def build_ce_trie(ce):
+    trie = Trie()
+    for event_index, event in enumerate(ce.events):
+        for command_index, command in enumerate(event.commands):
+            if command._has_text:
+                for line_index, line in enumerate(command.string_args):
+                    if command.is_text_line(line_index):
+                        trie.insert(line, type(command).__name__, (event_index, command_index), line_index)
+    return trie
 
-def normalize_n(line, into_csv_n = False):
-    return line.replace('\r', '') if into_csv_n else line.replace('\n', '\r\n')
 
-def translate_attribute_of_command(command, values_dict) -> bool:
-    is_translated = False
-    if isinstance(command, commands.Choices):
-        for i, line in enumerate(command.text):
-            if line in values_dict and values_dict[line]:
-                command.text[i] = values_dict[line]
+def build_map_trie(mp):
+    trie = Trie()
+    for event_index, event in enumerate(mp.events):
+        for page_index, page in enumerate(event.pages):
+            for command_index, command in enumerate(page.commands):
+                if command._has_text:
+                    for line_index, line in enumerate(command.string_args):
+                        if command.is_text_line(line_index):
+                            trie.insert(line, type(command).__name__, (event_index, page_index, command_index), line_index)
+    return trie
+
+def apply_translations(target, strs, attrs, trie):
+    ret_translated = False
+    len_strs = len(strs)
+    len_attrs = len(attrs)
+    total_translations = len_strs + len_attrs
+    processed_translations = 0
+
+    def process_command(command, original, translated, line_index, is_string):
+        nonlocal processed_translations
+        is_translated = False
+        if not DROP_EMTPY and not translated: return False
+        if is_string:
+            if not is_string_command(command): return False
+        else:
+            if not is_attribute_command(command): return False
+
+        if isinstance(command, (commands.Message, commands.SetString, commands.Picture)):
+            if command.string_args and normalize_n(command.text, True) == original:
+                command.text = normalize_n(translated)
                 is_translated = True
-    elif isinstance(command, commands.CommonEvent):
-        if not MODE_REPACK_CE_PARAMS or MODE_CEARG_AS_STRING: return False
-        for i, line in enumerate(command.text):
-            if len(MODE_REPACK_CE_ARG_N):
-                for j, evid in enumerate(MODE_REPACK_CE_EVID):
-                    if command.args[1] == evid or evid == -1:
-                        if i + 1 == MODE_REPACK_CE_ARG_N[j] and (
-                                line in values_dict and values_dict[line]):
-                            command.text[i] = normalize_n(values_dict[line])
-                            is_translated = True
-                            break
-            elif line in values_dict and values_dict[line]:
-                command.text[i] = values_dict[line]
-                is_translated = True
-    elif isinstance(command, commands.CommonEventByName):
-        if not MODE_REPACK_CEBN_PARAMS or MODE_CEARG_AS_STRING: return False
-        for i, line in enumerate(command.text):
-            if len(MODE_REPACK_CEBN_ARG_N):
-                for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
-                    if command.args[1] == nevid or nevid == -1:
-                        if i + 1 == MODE_REPACK_CEBN_ARG_N[j]:
-                            if line in values_dict and values_dict[line]:
-                                command.text[i] = normalize_n(values_dict[line])
+        elif isinstance(command, commands.CommonEvent):
+            for i, line in enumerate(command.string_args):
+                if len(MODE_REPACK_CE_ARG_N):
+                    for j, evid in enumerate(MODE_REPACK_CE_EVID):
+                        if command.args[1] == evid or evid == -1:
+                            if i + 1 == MODE_REPACK_CE_ARG_N[j] and normalize_n(line, True) == original:
+                                command.string_args[i] = normalize_n(translated)
                                 is_translated = True
                                 break
-            elif line in values_dict and values_dict[line]:
-                command.text[i] = normalize_n(values_dict[line])
-                is_translated = True
-    elif isinstance(command, commands.Database):
-        line = command.text
-        if line in values_dict and values_dict[line]:
-            command.text = values_dict[line]
-            is_translated = True
-        for i, line in enumerate(command.string_args):
-            if line in values_dict and values_dict[line]:
-                command.string_args[i] = values_dict[line]
-                is_translated = True
-    elif isinstance(command, commands.StringCondition):
-        for i, line in enumerate(command.string_args):
-            if line in values_dict and values_dict[line]:
-                command.string_args[i] = values_dict[line]
-                is_translated = True
-    elif isinstance(command, commands.Picture):
-        if command.ptype == "text":
-            line = command.text
-            if line in values_dict and values_dict[line]:
-                command.text = values_dict[line]
-                is_translated = True
-    elif isinstance(command, commands.SetString):
-        if MODE_SETSTRING_AS_STRING: return False
-        line = command.text
-        if line in values_dict and values_dict[line]:
-            command.text = values_dict[line]
-            is_translated = True
+                elif normalize_n(line, True) == original:
+                    command.text[i] = normalize_n(translated)
+                    is_translated = True
+        elif isinstance(command, commands.CommonEventByName):
+            for i, line in enumerate(command.string_args):
+                if len(MODE_REPACK_CEBN_ARG_N):
+                    for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
+                        if command.args[1] == nevid or nevid == -1:
+                            if i + 1 == MODE_REPACK_CEBN_ARG_N[j] and normalize_n(line, True) == original:
+                                command.string_args[i] = normalize_n(translated)
+                                is_translated = True
+                                break
+                elif normalize_n(line, True) == original:
+                    command.string_args[i] = normalize_n(translated)
+                    is_translated = True
+        elif isinstance(command, (commands.Choices, commands.StringCondition, commands.Database)):
+            for i, line in enumerate(command.string_args):
+                if normalize_n(line, True) == original:
+                    command.string_args[i] = normalize_n(translated)
+                    is_translated = True
+                    break
+        return is_translated
 
-    return is_translated
+    for string_pair in strs:
+        try:
+            source_string, translated_string = string_pair
+        except:
+            print(f"corrupted line {string_pair} (check ¶ newline escapes)")
+            continue
+        node = trie.search(source_string)
+        if node:
+            coords_to_delete = []
+            for coord_i, coordinate in enumerate(node.coordinates):
+                if len(coordinate) == 3:  # Map events
+                    event_index, page_index, command_index = coordinate
+                    command = target.events[event_index].pages[page_index].commands[command_index]
+                else:  # Common events
+                    event_index, command_index = coordinate
+                    command = target.events[event_index].commands[command_index]
 
-def translate_string_of_command(command, value) -> bool:
-    is_translated = False
+                tr_s = process_command(command, source_string, translated_string, node.line_indexes[coord_i], True)
+                ret_translated |= tr_s
 
-    if isinstance(command, commands.Message):
-        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-            command.text = normalize_n(value[1])
-            is_translated = True
-    elif isinstance(command, commands.SetString):
-        if not MODE_SETSTRING_AS_STRING: return False
-        if (command.text == value[0] or normalize_n(command.text, True) == value[0]) and value[1]:
-            command.text = normalize_n(value[1])
-            is_translated = True
-    elif isinstance(command, commands.CommonEvent):
-        if not MODE_REPACK_CE_PARAMS or not MODE_CEARG_AS_STRING: return False
-        for i, line in enumerate(command.text):
-            if len(MODE_REPACK_CE_ARG_N):
-                for j, evid in enumerate(MODE_REPACK_CE_EVID):
-                    if command.args[1] == evid or evid == -1:
-                        if i + 1 == MODE_REPACK_CE_ARG_N[j] and (
-                                line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                            command.text[i] = normalize_n(value[1])
-                            is_translated = True
-                            break
-            elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                command.text[i] = normalize_n(value[1])
-                is_translated = True
-    elif isinstance(command, commands.CommonEventByName):
-        if not MODE_REPACK_CEBN_PARAMS or not MODE_CEARG_AS_STRING: return False
-        for i, line in enumerate(command.text):
-            if len(MODE_REPACK_CEBN_ARG_N):
-                for j, nevid in enumerate(MODE_REPACK_CEBN_EVID):
-                    if command.args[1] == nevid or nevid == -1:
-                        if i + 1 == MODE_REPACK_CEBN_ARG_N[j] and (
-                                line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                            command.text[i] = normalize_n(value[1])
-                            is_translated = True
-                            break
-            elif (line == value[0] or normalize_n(line, True) == value[0]) and value[1]:
-                command.text[i] = normalize_n(value[1])
-                is_translated = True
-    return is_translated
+                if tr_s:
+                    coords_to_delete.append(coord_i)
+                    break
+            for i in sorted(coords_to_delete, reverse=True):
+                del node.coordinates[i]
+
+        processed_translations += 1
+        print_progress(processed_translations / total_translations * 100, 100)
+
+    for source_attribute, translated_string in attrs.items():
+        node = trie.search(source_attribute)
+        if node:
+            for coordinate in node.coordinates:
+                if len(coordinate) == 3:
+                    event_index, page_index, command_index = coordinate
+                    command = target.events[event_index].pages[page_index].commands[command_index]
+                else:
+                    event_index, command_index = coordinate
+                    command = target.events[event_index].commands[command_index]
+
+                ret_translated |= process_command(command, source_attribute, translated_string, None, False)
+
+        processed_translations += 1
+        print_progress(processed_translations / total_translations * 100, 100)
+
+    return ret_translated
 
 def get_context(command):
     return ''
@@ -249,6 +263,7 @@ def main():
     db_names = list(filter(lambda x: "wolfrpg" not in x and "SysDataBaseBasic" not in x and "translation_out" not in x, search_resource(
         os.getcwd(), "*.project"))) # projects
 
+
     #maps_cache = dict()
     print("Translating maps...")
     for map_name in map_names:
@@ -264,21 +279,14 @@ def main():
         #maps_cache[map_name] = mp
         strs = read_string_translations(map_name, ".mps")
         attrs = read_attribute_translations(map_name, ".mps")
-        tr_b = False
-        for event in mp.events:
-            for page in event.pages:
-                for i, command in enumerate(page.commands):
-                    tr_b |= translate_attribute_of_command(command, attrs)
-                    for j, _s in enumerate(strs):
-                        if not _s: continue
-                        if translate_string_of_command(command, _s):
-                            strs[j] = None
-                            tr_b = True
-                            break
-        if tr_b:
-            mp.write(make_out_name(map_name, work_dir))
-        if ENABLE_YAML_DUMPING:
-            yaml_dump.dump(mp, remove_ext(map_name))
+        if strs or attrs:
+            map_trie = build_map_trie(mp)
+            is_translated = apply_translations(mp, strs, attrs, map_trie)
+            if is_translated:
+                mp.write(make_out_name(map_name, work_dir))
+            if ENABLE_YAML_DUMPING:
+                yaml_dump.dump(mp, remove_ext(map_name))
+
 
     print("Translating common events...")
     commonevents_name = commonevents_name[0]
@@ -290,31 +298,19 @@ def main():
         except Exception as e:
             print(f"FAILED: {e}")
             sys.exit(1)
+
     strs = read_string_translations(commonevents_name, ".dat")
     attrs = read_attribute_translations(commonevents_name, ".dat")
-    l_strs = len(strs)
-    #l_attrs = len(attrs)
-    print_progress(0, 100)
-    #l_events = sum(1 for _ in ce.events)
-    li = 0
-    tr_b = False
+    if strs or attrs:
+        print_progress(0, 100)
+        ce_trie = build_ce_trie(ce)
+        is_translated = apply_translations(ce, strs, attrs, ce_trie)
+        print_progress(100, 100)
+        if is_translated:
+            ce.write(make_out_name(commonevents_name, work_dir))
+        if ENABLE_YAML_DUMPING:
+            yaml_dump.dump(ce, remove_ext(commonevents_name))
 
-    for event in ce.events:
-        for command in event.commands:
-            tr_b |= translate_attribute_of_command(command, attrs)
-            for j, _s in enumerate(strs):
-                if not _s: continue
-                if translate_string_of_command(command, _s):
-                    li += 1
-                    strs[j] = None # there's only one translation per string in csv, non-repeating
-                    tr_b = True
-                    print_progress(li / l_strs * 100, 100)
-                    break
-    print_progress(100, 100)
-    if tr_b:
-        ce.write(make_out_name(commonevents_name, work_dir))
-    if ENABLE_YAML_DUMPING:
-        yaml_dump.dump(ce, remove_ext(commonevents_name))
 
     print("Translating project databases...")
     for db_name in db_names:

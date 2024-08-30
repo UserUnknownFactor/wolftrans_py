@@ -96,6 +96,11 @@ class Map():
 
             coder.write_u1(self.MAP_TERMINATOR)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['filename']
+        return state
+
     #--------DEBUG method that searches for a string somewhere in the map ----------
     #
     def grep(self, needle):

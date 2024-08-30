@@ -221,6 +221,8 @@ def main():
     global MODE_REPACK_CEBN_ARG_N
     global MODE_REPACK_CE_EVID
     global MODE_REPACK_CEBN_EVID
+    
+    global DEFAULT_OUT_DIR
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -235,8 +237,13 @@ def main():
     parser.add_argument("-na", type=str, default='0', metavar="cebn_types", nargs='?',
                         help="Comma separated list of allowed CommonEventByName args (#|id; ex: 3|12345,5|12345,3|67890)")
     parser.add_argument("-u", help="Repack strings as UTF-8", action="store_true")
+    parser.add_argument("-out", default=DEFAULT_OUT_DIR, help="Output directory")
     args = parser.parse_args()
     print(args)
+
+    if os.path.isdir(args.out):
+        DEFAULT_OUT_DIR = args.out
+    print(f"Output directory: {os.path.abspath(args.out)}")
 
     MODE_SETSTRING_AS_STRING = args.s
     MODE_CEARG_AS_STRING = args.a

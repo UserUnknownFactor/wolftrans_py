@@ -10,8 +10,8 @@ class Database():
 
     def __init__(self, project_filename, dat_filename):
         with FileCoder.open(project_filename, 'r') as coder:
-            types_len = coder.read_u4()
-            self.types = [self.Type(coder) for _ in range(types_len)]
+            types_count = coder.read_u4()
+            self.types = [self.Type(coder) for _ in range(types_count)]
 
         with FileCoder.open(dat_filename, 'r', Database.DAT_SEED_INDICES, is_db=True) as coder:
             if coder.encrypted:
@@ -78,11 +78,11 @@ class Database():
         # Initialize from project file IO
         def __init__(self, coder):
             self.name = coder.read_string()
-            fields_len = coder.read_u4()
-            self.fields = [Database.Field(coder) for _ in range(fields_len)]
+            fields_count = coder.read_u4()
+            self.fields = [Database.Field(coder) for _ in range(fields_count)]
 
-            data_len = coder.read_u4()
-            self.data = [Database.Data(coder) for _ in range(data_len)]
+            data_count = coder.read_u4()
+            self.data = [Database.Data(coder) for _ in range(data_count)]
 
             self.description = coder.read_string()
 
@@ -102,13 +102,13 @@ class Database():
 
             str_args_alen =  coder.read_u4()
             for i in range(str_args_alen):
-                strs_len = coder.read_u4()
-                self.fields[i].string_args = [coder.read_string() for _ in range(strs_len)]
+                strs_count = coder.read_u4()
+                self.fields[i].string_args = [coder.read_string() for _ in range(strs_count)]
 
             args_alen = coder.read_u4()
             for i in range(args_alen):
-                ints_len = coder.read_u4()
-                self.fields[i].args = [coder.read_u4() for _ in range(ints_len)]
+                ints_count = coder.read_u4()
+                self.fields[i].args = [coder.read_u4() for _ in range(ints_count)]
 
             dafaults_alen = coder.read_u4()
             for i in range(dafaults_alen):

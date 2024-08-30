@@ -81,6 +81,12 @@ class Command:
         self._has_text = False
         self._text_index = None
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['_has_text']
+        del state['_text_index']
+        return state
+
     def terminate_stream(self, coder):
         coder.write_terminator()
 

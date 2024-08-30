@@ -47,17 +47,24 @@ def search_resource(path, name):
 
 def extract_previous(filename, textarr):
     old = read_csv_dict(filename.replace(".csv", ".old"))
+    commented = {}
+    for k, v in old.items():
+        if k.startswith('//'):
+            commented[k[2:]] = v
     if not len(old): return
     for i, a in enumerate(textarr):
-        if a[0] in old:
+        if a[0] in commented:
+            textarr[i][1] = commented[a[0]]
+            textarr[i][0] = '//' + a[0]
+        elif a[0] in old:
             textarr[i][1] = old[a[0]]
     return textarr
 
 def normalize_and_filter(text):
     if isinstance(text, str):
-        return [normalize_n(text)] if is_translatable(text) else []
+        return [normalize_n(text, True)] if is_translatable(text) else []
     elif isinstance(text, list):
-        return [normalize_n(i) for i in text if is_translatable(i)]
+        return [normalize_n(i, True) for i in text if is_translatable(i)]
     return []
 
 def attributes_of_command(command):
@@ -300,23 +307,12 @@ def main():
     if len(dat_name): dat_name = dat_name[0]
     if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
         print("Extracting",os.path.basename(dat_name) +"...")
-        if MODE_BREAK_ON_EXCEPTIONS:
-            gd = gamedats.GameDat(dat_name)
-        else:
-            try:
-                gd = gamedats.GameDat(dat_name)
-            except Exception as e:
-                print(e)
-            sys.exit(2)
+        gd = gamedats.GameDat(dat_name)
         translatable = []
-        if gd.title:
-            translatable.append([gd.title, '', "TITLE"])
-        if gd.version:
-            translatable.append([gd.version, '', "VERSION"])
-        if gd.font:
-            translatable.append([gd.font, '', "FONT"])
-        if gd.subfonts:
-            translatable += [[font, '', "SUBFONT"] for font in gd.subfonts if font]
+        if gd.title: translatable.append([gd.title, '', "TITLE"])
+        if gd.version: translatable.append([gd.version, '', "VERSION"])
+        if gd.font: translatable.append([gd.font, '', "FONT"])
+        if gd.subfonts: translatable += [[font, '', "SUBFONT"] for font in gd.subfonts if font]
         dat_name_only = remove_ext(os.path.basename(dat_name))
         extract_previous(os.path.join(
             os.path.dirname(dat_name),

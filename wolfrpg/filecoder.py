@@ -180,6 +180,7 @@ class FileCoder(object):
         elif size > 20000:
             self.print_stack()
             raise Exception(f"string of size {hex(size & 0xFFFFFFFF)} is improbable")
+
         _bstr = b''
         if size > 1:
             _bstr = self.read(size - 1)
@@ -194,7 +195,8 @@ class FileCoder(object):
             _str = _bstr.decode(encoding)
         except:
             self.print_stack()
-            raise Exception(f"bad string encoding ({encoding}): {_bstr} (try -u switch)")
+            print(f"bad string encoding ({encoding}): {_bstr} (try -u switch if all strings err)")
+            return _bstr.decode(encoding, errors='ignore')
         return _str
 
     def read_byte_array(self, arr_len = None):

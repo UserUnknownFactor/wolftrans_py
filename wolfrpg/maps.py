@@ -94,7 +94,7 @@ class Map():
                 coder.write_u1(self.MAP_EVENT_MARKER)
                 event.write(coder)
 
-            coder.write_u1(self.MAP_TERMINATOR)
+            coder.write_terminator(self.MAP_TERMINATOR)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -167,7 +167,7 @@ class Map():
                 coder.write_u1(self.EVENT_MARKER)
                 page.write(coder)
 
-            coder.write_u1(self.EVENT_TERMINATOR)
+            coder.write_terminator(self.EVENT_TERMINATOR)
 
 
         class Page():
@@ -246,4 +246,4 @@ class Map():
                 if self.features > 3:
                     coder.write_u1(self.page_transfer)
 
-                coder.write_u1(self.PAGE_TERMINATOR)
+                coder.write_terminator(self.PAGE_TERMINATOR)

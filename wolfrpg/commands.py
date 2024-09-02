@@ -180,7 +180,7 @@ class Comment(Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._has_text = True
-        self._text_index= None
+        self._text_index = None
 
 class ForceStopMessage(Command):
     pass
@@ -189,7 +189,7 @@ class DebugMessage(Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._has_text = True
-        self._text_index= 0
+        self._text_index = 0
 
 class ClearDebugText(Command):
     pass
@@ -201,7 +201,7 @@ class StringCondition(Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._has_text = True
-        self._text_index= None
+        self._text_index = None
 
 class SetVariable(Command):
     pass
@@ -210,7 +210,7 @@ class SetString(Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._has_text = True
-        self._text_index= 0
+        #self._text_index = 0
 
 class InputKey(Command):
     pass

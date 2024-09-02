@@ -1,6 +1,7 @@
 ﻿import struct, sys
 from io import BytesIO, SEEK_CUR
 
+DEBUG = True
 this = sys.modules[__name__]
 this.USE_UTF8_STRINGS = None
 this.s_proj_key = None
@@ -39,7 +40,7 @@ class FileCoder(object):
         self.is_db = is_db
 
         if this.USE_UTF8_STRINGS is None:
-            raise Exception("Please specify string encoding via filecoder.initialize() method")
+            raise Exception("Please specify string encoding via filecoder.initialize()")
         self.is_utf8 = this.USE_UTF8_STRINGS
 
         if mode == 'r':
@@ -142,6 +143,7 @@ class FileCoder(object):
 
     @staticmethod
     def print_stack():
+        if not DEBUG: return
         import traceback
         for line in traceback.format_stack()[:-1]:
             print(line.strip())
@@ -219,7 +221,7 @@ class FileCoder(object):
         if have != expected:
             self.io.seek(-len(expected), SEEK_CUR)
             #self.print_stack()
-            if final:
+            if DEBUG:
                 from .debuging import underline_differences
                 underline_differences(expected, have)
             raise Exception(f"Verification failed: expected {expected}, got {actual}")

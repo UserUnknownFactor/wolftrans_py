@@ -77,10 +77,21 @@ def apply_translations(target, strs, attrs, trie):
         else:
             if not is_attribute_command(command): return False
 
-        if isinstance(command, (commands.Message, commands.SetString, commands.Picture)):
-            if command.string_args and normalize_n(command.text, True) == original:
-                command.text = normalize_n(translated)
-                is_translated = True
+        if isinstance(command, (
+                commands.Message, commands.Picture, 
+                commands.Choices, commands.SetString, 
+                commands.StringCondition, commands.Database)):
+            # NOTE: SetString can have several string_args
+            if not isinstance(command.text, str):
+                for i, line in enumerate(command.text):
+                    if normalize_n(line, True) == original:
+                        command.text[i] = normalize_n(translated)
+                        is_translated = True
+                        break
+            else:
+                if normalize_n(command.text, True) == original:
+                    command.text = normalize_n(translated)
+                    is_translated = True
         elif isinstance(command, commands.CommonEvent):
             for i, line in enumerate(command.string_args):
                 if len(MODE_REPACK_CE_ARG_N):
@@ -105,12 +116,7 @@ def apply_translations(target, strs, attrs, trie):
                 elif normalize_n(line, True) == original:
                     command.string_args[i] = normalize_n(translated)
                     is_translated = True
-        elif isinstance(command, (commands.Choices, commands.StringCondition, commands.Database)):
-            for i, line in enumerate(command.string_args):
-                if normalize_n(line, True) == original:
-                    command.string_args[i] = normalize_n(translated)
-                    is_translated = True
-                    break
+
         return is_translated
 
     for string_pair in strs:
@@ -274,7 +280,10 @@ def main():
     #maps_cache = dict()
     print("Translating maps...")
     for map_name in map_names:
-        print(f"Translating {map_name}...")
+        strs = read_string_translations(map_name, ".mps")
+        attrs = read_attribute_translations(map_name, ".mps")
+        if not strs and not attrs: continue
+        print(f"Translating map {os.path.relpath(map_name)}...")
         if MODE_BREAK_ON_EXCEPTIONS:
             mp = maps.Map(map_name)
         else:
@@ -284,8 +293,6 @@ def main():
                 print(f"FAILED: {e}")
                 continue
         #maps_cache[map_name] = mp
-        strs = read_string_translations(map_name, ".mps")
-        attrs = read_attribute_translations(map_name, ".mps")
         if strs or attrs:
             map_trie = build_map_trie(mp)
             is_translated = apply_translations(mp, strs, attrs, map_trie)
@@ -295,20 +302,19 @@ def main():
                 yaml_dump.dump(mp, remove_ext(map_name))
 
 
-    print("Translating common events...")
     commonevents_name = commonevents_name[0]
-    if MODE_BREAK_ON_EXCEPTIONS:
-        ce = common_events.CommonEvents(commonevents_name)
-    else:
-        try:
-            ce = common_events.CommonEvents(commonevents_name)
-        except Exception as e:
-            print(f"FAILED: {e}")
-            sys.exit(1)
-
     strs = read_string_translations(commonevents_name, ".dat")
     attrs = read_attribute_translations(commonevents_name, ".dat")
     if strs or attrs:
+        print(f"Translating common events {os.path.relpath(commonevents_name)}...")
+        if MODE_BREAK_ON_EXCEPTIONS:
+            ce = common_events.CommonEvents(commonevents_name)
+        else:
+            try:
+                ce = common_events.CommonEvents(commonevents_name)
+            except Exception as e:
+                print(f"FAILED: {e}")
+                sys.exit(1)
         print_progress(0, 100)
         ce_trie = build_ce_trie(ce)
         is_translated = apply_translations(ce, strs, attrs, ce_trie)
@@ -321,7 +327,9 @@ def main():
 
     print("Translating project databases...")
     for db_name in db_names:
-        print("Translating", db_name,"...")
+        attrs = read_attribute_translations(db_name, ".dat")
+        if not attrs: continue
+        print(f"Translating database {os.path.relpath(db_name)}...")
         db_name_only = remove_ext(os.path.basename(db_name))
         if not os.path.isfile(db_name.replace(".project", ".dat")):
             print("No .dat file for", db_name)
@@ -334,7 +342,6 @@ def main():
             except Exception as e:
                 print("Skipping", db_name, "due to error:\n", e,"\n")
                 continue
-        attrs = read_attribute_translations(db_name, ".dat")
         for t in db.types:
             for i, d in enumerate(t.data):
                 if MODE_REPACK_DB_NAMES and hasattr(d, "name"):
@@ -352,8 +359,8 @@ def main():
 
     dat_name = dat_name[0]
     attrs = read_attribute_translations(dat_name, ".dat")
-    if len(attrs):
-        print(f"Translating game dat file {dat_name}...")
+    if attrs:
+        print(f"Translating game database {os.path.relpath(dat_name)}...")
         if MODE_BREAK_ON_EXCEPTIONS:
             gd = gamedats.GameDat(dat_name)
         else:

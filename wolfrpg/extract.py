@@ -63,7 +63,7 @@ def extract_previous(filename, textarr):
 def normalize_and_filter(text):
     if isinstance(text, str):
         return [normalize_n(text, True)] if is_translatable(text) else []
-    elif isinstance(text, list):
+    if isinstance(text, list):
         return [normalize_n(i, True) for i in text if is_translatable(i)]
     return []
 
@@ -223,9 +223,9 @@ def main():
                     if len(a):
                         translatable_attrs = translatable_attrs | a
                     s = strings_of_command(command)
-                    if len(s):
-                        translatable_strings += [make_csv_field(
-                            strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
+                    if not s: continue
+                    translatable_strings += [make_csv_field(
+                        strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
         translatable_attrs = [make_csv_field(attr, command) for attr in translatable_attrs]
         write_translations(map_name, translatable_attrs, translatable_strings, ".mps")
         tags += search_tags(translatable_attrs)
@@ -254,9 +254,9 @@ def main():
                 if len(a):
                     translatable_attrs = translatable_attrs | a
                 s = strings_of_command(command)
-                if len(s):
-                    translatable_strings += [make_csv_field(
-                        strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
+                if not s: continue
+                translatable_strings += [make_csv_field(
+                    strn, command) for strn in s if not MEDIA_EXTENSION_RE.search(strn)]
         translatable_attrs = [make_csv_field(attr, command) for attr in translatable_attrs]
         write_translations(commonevents_name, translatable_attrs, translatable_strings, ".dat")
         tags += search_tags(translatable_attrs)

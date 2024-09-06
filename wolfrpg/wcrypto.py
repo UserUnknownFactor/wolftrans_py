@@ -1,12 +1,23 @@
 seed = 0
 
+RAND_MULTIPLIER = 0x343FD
+RAND_INCREMENT = 0x269EC3
+RAND_MASK = 0x7FFF
+KC0 = 3000
+KC1 = 20000
+KC2 = 200
+
+def get_seed():
+    global seed
+    return seed
+
 def srand(s):
     global seed
     seed = s
 
-def rand(mask):
+def rand(mask: int = 0xFFFFFFFF):
     global seed
-    seed = (seed * 0x343FD + 0x269EC3) & 0xFFFFFFFF
+    seed = (seed * RAND_MULTIPLIER + RAND_INCREMENT) & 0xFFFFFFFF
     return (seed >> 16) & mask
 
 # Constants

@@ -154,7 +154,7 @@ def main():
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", default="map,common,game,dbs", help="Type of files to extract")
+    parser.add_argument("-f", default="maps,common,game,dbs", help="Type of files to extract (maps,common,game,dbs)")
     parser.add_argument("-s", help="Treat SetString as attributes", action="store_false")
     parser.add_argument("-a", help="Treat CommonEvent[ByName] args as attributes", action="store_false")
     parser.add_argument("-n", help="Don't extract Database names", action="store_false")
@@ -189,7 +189,7 @@ def main():
 
     filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
 
-    map_names = search_resource(os.getcwd(), "*.mps") if "map" in args.f else [] # map data
+    map_names = search_resource(os.getcwd(), "*.mps") if "maps" in args.f else [] # map data
     commonevents_name = search_resource(os.getcwd(), "CommonEvent.dat") if "common" in args.f else [] # common events
     dat_name = search_resource(os.getcwd(), "Game.dat") if "game" in args.f else []  # basic data
     db_names = list(filter(lambda x: "wolfrpg" not in x and "SysDataBaseBasic" not in x, search_resource(
@@ -309,10 +309,11 @@ def main():
         print("Extracting",os.path.basename(dat_name) +"...")
         gd = gamedats.GameDat(dat_name)
         translatable = []
-        if gd.title: translatable.append([gd.title, '', "TITLE"])
-        if gd.version: translatable.append([gd.version, '', "VERSION"])
-        if gd.font: translatable.append([gd.font, '', "FONT"])
-        if gd.subfonts: translatable += [[font, '', "SUBFONT"] for font in gd.subfonts if font]
+        gds = gd.string_settings
+        if gds.title: translatable.append([gds.title, '', "TITLE"])
+        if gds.version: translatable.append([gds.version, '', "VERSION"])
+        if gds.font: translatable.append([gds.font, '', "FONT"])
+        if gds.subfonts: translatable += [[font, '', f"SUBFONT{i}"] for i, font in enumerate(gds.subfonts) if font]
         dat_name_only = remove_ext(os.path.basename(dat_name))
         extract_previous(os.path.join(
             os.path.dirname(dat_name),

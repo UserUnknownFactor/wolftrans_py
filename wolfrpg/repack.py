@@ -78,8 +78,8 @@ def apply_translations(target, strs, attrs, trie):
             if not is_attribute_command(command): return False
 
         if isinstance(command, (
-                commands.Message, commands.Picture, 
-                commands.Choices, commands.SetString, 
+                commands.Message, commands.Picture,
+                commands.Choices, commands.SetString,
                 commands.StringCondition, commands.Database)):
             # NOTE: SetString can have several string_args
             if not isinstance(command.text, str):
@@ -227,12 +227,12 @@ def main():
     global MODE_REPACK_CEBN_ARG_N
     global MODE_REPACK_CE_EVID
     global MODE_REPACK_CEBN_EVID
-    
+
     global DEFAULT_OUT_DIR
 
     import argparse
     parser = argparse.ArgumentParser()
-    #parser.add_argument("-f", default="map,common,game,dbs", help="Types of files to repack (map,common,game,dbs)")
+    parser.add_argument("-f", default="maps,common,game,dbs", help="Types of files to repack (maps,common,game,dbs)")
     parser.add_argument("-s", help="Treat SetString as attributes", action="store_false")
     parser.add_argument("-a", help="Treat CommonEvent[ByName] args as attributes", action="store_false")
     parser.add_argument("-n", help="Repack Database names", action="store_true")
@@ -270,15 +270,16 @@ def main():
 
     work_dir = os.getcwd()
 
-    map_names = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "*.mps"))) # map data
-    commonevents_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "CommonEvent.dat"))) # common events
-    dat_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "Game.dat"))) # basicdata
+    map_names = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "*.mps"))) if "maps" in args.f else []  # map data
+    commonevents_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "CommonEvent.dat"))) if "common" in args.f else []  # common events
+    dat_name = list(filter(lambda x: "translation_out" not in x, search_resource(os.getcwd(), "Game.dat"))) if "game" in args.f else []  # basicdata
     db_names = list(filter(lambda x: "wolfrpg" not in x and "SysDataBaseBasic" not in x and "translation_out" not in x, search_resource(
-        os.getcwd(), "*.project"))) # projects
+        os.getcwd(), "*.project"))) if "dbs" in args.f else []  # projects
 
 
     #maps_cache = dict()
-    print("Translating maps...")
+    if map_names:
+        print("Translating maps...")
     for map_name in map_names:
         strs = read_string_translations(map_name, ".mps")
         attrs = read_attribute_translations(map_name, ".mps")
@@ -302,30 +303,31 @@ def main():
                 yaml_dump.dump(mp, remove_ext(map_name))
 
 
-    commonevents_name = commonevents_name[0]
-    strs = read_string_translations(commonevents_name, ".dat")
-    attrs = read_attribute_translations(commonevents_name, ".dat")
-    if strs or attrs:
-        print(f"Translating common events {os.path.relpath(commonevents_name)}...")
-        if MODE_BREAK_ON_EXCEPTIONS:
-            ce = common_events.CommonEvents(commonevents_name)
-        else:
-            try:
+    if commonevents_name:
+        commonevents_name = commonevents_name[0]
+        strs = read_string_translations(commonevents_name, ".dat")
+        attrs = read_attribute_translations(commonevents_name, ".dat")
+        if strs or attrs:
+            print(f"Translating common events {os.path.relpath(commonevents_name)}...")
+            if MODE_BREAK_ON_EXCEPTIONS:
                 ce = common_events.CommonEvents(commonevents_name)
-            except Exception as e:
-                print(f"FAILED: {e}")
-                sys.exit(1)
-        print_progress(0, 100)
-        ce_trie = build_ce_trie(ce)
-        is_translated = apply_translations(ce, strs, attrs, ce_trie)
-        print_progress(100, 100)
-        if is_translated:
-            ce.write(make_out_name(commonevents_name, work_dir))
-        if ENABLE_YAML_DUMPING:
-            yaml_dump.dump(ce, remove_ext(commonevents_name))
+            else:
+                try:
+                    ce = common_events.CommonEvents(commonevents_name)
+                except Exception as e:
+                    print(f"FAILED: {e}")
+                    sys.exit(1)
+            print_progress(0, 100)
+            ce_trie = build_ce_trie(ce)
+            is_translated = apply_translations(ce, strs, attrs, ce_trie)
+            print_progress(100, 100)
+            if is_translated:
+                ce.write(make_out_name(commonevents_name, work_dir))
+            if ENABLE_YAML_DUMPING:
+                yaml_dump.dump(ce, remove_ext(commonevents_name))
 
-
-    print("Translating project databases...")
+    if db_names:
+        print("Translating project databases...")
     for db_name in db_names:
         attrs = read_attribute_translations(db_name, ".dat")
         if not attrs: continue
@@ -357,30 +359,32 @@ def main():
         if ENABLE_YAML_DUMPING:
             yaml_dump.dump(db, remove_ext(db_name))
 
-    dat_name = dat_name[0]
-    attrs = read_attribute_translations(dat_name, ".dat")
-    if attrs:
-        print(f"Translating game database {os.path.relpath(dat_name)}...")
-        if MODE_BREAK_ON_EXCEPTIONS:
-            gd = gamedats.GameDat(dat_name)
-        else:
-            try:
+    if dat_name:
+        dat_name = dat_name[0]
+        attrs = read_attribute_translations(dat_name, ".dat")
+        if attrs:
+            print(f"Translating game database {os.path.relpath(dat_name)}...")
+            if MODE_BREAK_ON_EXCEPTIONS:
                 gd = gamedats.GameDat(dat_name)
-            except Exception as e:
-                print("Skipping", db_name, "due to error:\n", e,"\n")
-                sys.exit(1)
-        for a in attrs:
-            if gd.title in attrs and attrs[gd.title]:
-                gd.title = attrs[gd.title]
-            if gd.version and gd.version in attrs and attrs[gd.version]:
-                gd.version = attrs[gd.version]
-            if gd.font in attrs and attrs[gd.font]:
-                gd.font = attrs[gd.font]
-            if gd.subfonts:
-                for i, font in enumerate(gd.subfonts):
+            else:
+                try:
+                    gd = gamedats.GameDat(dat_name)
+                except Exception as e:
+                    print("Skipping", db_name, "due to error:\n", e,"\n")
+                    sys.exit(1)
+
+            gds = gd.string_settings
+            if gds.title in attrs and attrs[gds.title]:
+                gds.title = attrs[gds.title]
+            if gds.version and gds.version in attrs and attrs[gds.version]:
+                gds.version = attrs[gds.version]
+            if gds.font in attrs and attrs[gds.font]:
+                gds.font = attrs[gds.font]
+            if gds.subfonts:
+                for i, font in enumerate(gds.subfonts):
                     if font  in attrs and attrs[font]:
-                        gd.subfonts[i] = attrs[font]
-        gd.write(make_out_name(dat_name, work_dir))
+                        gds.subfonts[i] = attrs[font]
+            gd.write(make_out_name(dat_name, work_dir))
 
 if __name__ == "__main__":
     main()

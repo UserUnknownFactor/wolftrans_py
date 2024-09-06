@@ -309,18 +309,21 @@ class FileCoder(object):
         self.write(_str)
         self.write_terminator()
 
-    def write_byte_array(self, data):
-        self.write_u4(len(data))
+    def write_byte_array(self, data, with_length=True):
+        if with_length:
+            self.write_u4(len(data))
         for b in data:
             self.write_u1(b)
 
-    def write_int_array(self, data):
-        self.write_u4(len(data))
+    def write_int_array(self, data, with_length=True):
+        if with_length:
+            self.write_u4(len(data))
         for i in data:
             self.write_u4(i)
 
-    def write_string_array(self, data):
-        self.write_u4(len(data))
+    def write_string_array(self, data, with_length=True):
+        if with_length:
+            self.write_u4(len(data))
         for s in data:
             self.write_string(s)
 

@@ -206,6 +206,11 @@ class FileCoder(object):
             arr_len = self.read_u4()
         return [self.read_u1() for _ in range(arr_len)]
 
+    def read_word_array(self, arr_len = None):
+        if arr_len is None:
+            arr_len = self.read_u4()
+        return [self.read_u2() for _ in range(arr_len)]
+
     def read_int_array(self, arr_len = None):
         if arr_len is None:
             arr_len = self.read_u4()
@@ -221,7 +226,7 @@ class FileCoder(object):
         if have != expected:
             self.io.seek(-len(expected), SEEK_CUR)
             #self.print_stack()
-            if DEBUG:
+            if DEBUG and final:
                 from .debuging import underline_differences
                 underline_differences(expected, have)
             raise Exception(f"Verification failed: expected {expected}, got {actual}")
@@ -314,6 +319,12 @@ class FileCoder(object):
             self.write_u4(len(data))
         for b in data:
             self.write_u1(b)
+
+    def write_word_array(self, data, with_length=True):
+        if with_length:
+            self.write_u4(len(data))
+        for b in data:
+            self.write_u2(b)
 
     def write_int_array(self, data, with_length=True):
         if with_length:

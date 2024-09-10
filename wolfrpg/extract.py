@@ -305,7 +305,7 @@ def main():
             yaml_dump.dump(db, remove_ext(db_name))
 
     if len(dat_name): dat_name = dat_name[0]
-    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, ATTRIBUTES_DB_POSTFIX, ".dat")):
+    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, STRINGS_DB_POSTFIX, ".dat")):
         print("Extracting",os.path.basename(dat_name) +"...")
         gd = gamedats.GameDat(dat_name)
         translatable = []

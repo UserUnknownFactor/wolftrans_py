@@ -361,8 +361,8 @@ def main():
 
     if dat_name:
         dat_name = dat_name[0]
-        attrs = read_attribute_translations(dat_name, ".dat")
-        if attrs:
+        strs = read_string_translations(dat_name, ".dat")
+        if strs:
             print(f"Translating game database {os.path.relpath(dat_name)}...")
             if MODE_BREAK_ON_EXCEPTIONS:
                 gd = gamedats.GameDat(dat_name)
@@ -374,16 +374,20 @@ def main():
                     sys.exit(1)
 
             gds = gd.string_settings
-            if gds.title in attrs and attrs[gds.title]:
-                gds.title = attrs[gds.title]
-            if gds.version and gds.version in attrs and attrs[gds.version]:
-                gds.version = attrs[gds.version]
-            if gds.font in attrs and attrs[gds.font]:
-                gds.font = attrs[gds.font]
-            if gds.subfonts:
-                for i, font in enumerate(gds.subfonts):
-                    if font  in attrs and attrs[font]:
-                        gds.subfonts[i] = attrs[font]
+            for line in strs:
+                if len(line) <3: continue
+                if not line[1] and not DROP_EMTPY: continue
+                if line[2] == "TITLE":
+                    gds.title = line[1]
+                elif line[2] == "VERSION":
+                    gds.version = line[1]
+                elif line[2] == "FONT":
+                    gds.font = line[1]
+                else:
+                    for i, font in enumerate(gds.subfonts):
+                        if line[2] == f"SUBFONT{i}":
+                            gds.subfonts[i] = line[1]
+                            break
             gd.write(make_out_name(dat_name, work_dir))
 
 if __name__ == "__main__":

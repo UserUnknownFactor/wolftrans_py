@@ -2,6 +2,11 @@
 from io import BytesIO
 from enum import IntEnum
 
+HAS_SOLVER = True
+try:
+    from .randomgen import generate_randoms
+except:
+    HAS_SOLVER = False
 
 class MidiSource(IntEnum):
     HARDWARE = 0
@@ -140,8 +145,10 @@ class StringSettings():
             self.pro_title_during_loading  = coder.read_string()
             self.pro_title_during_gameplay = coder.read_string()
 
-        if self._string_count > 12:
-            self.unnown_strings = [coder.read_string() for _ in range(self._string_count - 12)]
+        if self._string_count > 13:
+            self.unknown_strings = []
+            for i in range(self._string_count - 13):
+                self.unknown_strings.append(coder.read_string())
 
     def write(self, coder):
         coder.write_u4(self._string_count)
@@ -165,8 +172,8 @@ class StringSettings():
             coder.write_string(self.pro_title_during_loading)
             coder.write_string(self.pro_title_during_gameplay)
 
-        if self._string_count > 12:
-            for string in self.unnown_strings:
+        if self._string_count > 13:
+            for string in self.unknown_strings:
                 coder.write_string(string)
 
     def byte_size(self, coder):
@@ -190,8 +197,8 @@ class StringSettings():
             size += coder.calc_string_size(self.pro_title_during_loading) + 4
             size += coder.calc_string_size(self.pro_title_during_gameplay) + 4
 
-        if self._string_count > 12:
-            for string in self.unnown_strings:
+        if self._string_count > 13:
+            for string in self.unknown_strings:
                 size += coder.calc_string_size(string) + 4
 
         return size
@@ -236,7 +243,7 @@ class ByteSettings():
             self.pro_loading_fadein = VEnable(coder.read_u1())
             self.pro_loading_fadeout = VEnable(coder.read_u1())
         if self._u1_count > 35:
-            self.settings_new = [coder.read_u1() for _ in range(self._u1_count - 35)]
+            self.settings_new = coder.read_byte_array(self._u1_count - 35)
 
     def write(self, coder):
         coder.write_u4(self._u1_count)
@@ -315,7 +322,7 @@ class WordSettings():
         if self._u2_count > 22:
             self.pro_default_screen_scale = coder.read_u2()
         if self._u2_count > 23:
-            self.settings_new = [coder.read_u2() for _ in range(self._u2_count - 23)]
+            self.settings_new = coder.read_word_array(self._u2_count - 23)
 
     def write(self, coder):
         coder.write_u4(self._u2_count)
@@ -358,7 +365,7 @@ class GameDat():
     SEED_INDICES = [0, 8, 6]
     #XSEED_INDICES = [3, 4, 5]
 
-    GAMEDAT_MAGIC = b'W\x00\x00OL\x00FM'
+    GAMEDAT_MAGIC = b'W\0\0OL\0FM'
     SERIAL_DEFAULT = "0000-0000"
 
     @property
@@ -385,19 +392,19 @@ class GameDat():
             assert self.file_size == real_size, (
                 f"size is unexpected; claims {self.file_size}, got: {real_size}")
 
-            self.unknown_1 = coder.read_u4()
-
+            self.hid_pos_len = coder.read_u4()
             self.word_settings = WordSettings(coder)
 
             self._rands_offset = coder.tell
-            self.r1 = coder.read_u4()
-            self.r2 = coder.read_u4()
+            self.pos_random_bases = coder.read_u4()
+            self.pos_obfuscations = coder.read_u4()
             pos2 = coder.tell
-            self.randoms = coder.read(29000 - (pos2 - pos1))  # pos2 - pos1 = 52 for V2 
+            self.randoms = coder.read(29000 - (pos2 - pos1))  # pos2 - pos1 = 52 for V2
             self.footer = VersionFooter(coder.read_u1())
             pass
 
     def write(self, filename):
+        global HAS_SOLVER
         stream = BytesIO()
         with FileCoder(stream, 'w', filename, self.SEED_INDICES, self.crypt_header) as coder:
             if not self.encrypted:
@@ -410,20 +417,28 @@ class GameDat():
             pos1 = coder.tell
             new_size  = self.byte_size(coder)
             delta = new_size - self.file_size
-            assert delta == 0, "Maintain the same modded bytesize " + (
-                    f"(diff: {('+' + str(delta)) if delta > 0 else delta}B) or use the Editor")
             coder.write_u4(new_size)  # file_size
-            coder.write_u4(self.unknown_1)
+            coder.write_u4(self.hid_pos_len)
             self.word_settings.write(coder)
 
             # static randoms
             pos2 = coder.tell
-            # TODO: to implement generate_randoms we must find initial seed of C's LCG rand()
-            #r1, r2, new_randoms = generate_randoms(
-            #   self._rands_offset, self.r1, self.r2, pos2, 29000 - (pos2 - pos1 + 8), self.randoms)
-            coder.write_u4(self.r1)
-            coder.write_u4(self.r2)
-            coder.write(self.randoms)
+            if HAS_SOLVER:
+                r1, r2, new_randoms = generate_randoms(
+                   self._rands_offset, self.pos_random_bases, self.pos_obfuscations, pos2, 29000 - (
+                       pos2 - pos1 + 8), self.randoms, self.hid_pos_len)
+                if r1 is None:
+                    HAS_SOLVER = False
+                else:
+                    coder.write_u4(r1)
+                    coder.write_u4(r2)
+                    coder.write(new_randoms)
+            if not HAS_SOLVER:
+                assert delta == 0, "Maintain the same modded bytesize " + (
+                        f"(diff: {('+' + str(delta)) if delta > 0 else delta}B) or use the Editor")
+                coder.write_u4(self.pos_random_bases)
+                coder.write_u4(self.pos_obfuscations)
+                coder.write(self.randoms)
             coder.write_u1(self.footer)
 
         with open(filename, 'wb') as f:

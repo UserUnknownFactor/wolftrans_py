@@ -1,24 +1,40 @@
 seed = 0
 
-RAND_MULTIPLIER = 0x343FD
+RAND_MULTIPLIER = 0x343FD # LCG from msvcrt.dll
 RAND_INCREMENT = 0x269EC3
-RAND_MASK = 0x7FFF
+RAND_MAX = 0x7FFF
+MAX_INT32 = 0x7FFFFFFF
 KC0 = 3000
 KC1 = 20000
 KC2 = 200
+
+HAS_LIB = False
+import ctypes, os
+try:
+    if os.name == "nt":
+        libc = ctypes.CDLL("MSVCRT")
+    else:
+        libc = ctypes.CDLL("libc.so.6")
+    HAS_LIB = True
+except:
+    pass
 
 def get_seed():
     global seed
     return seed
 
-def srand(s):
+def srand_my(s):
     global seed
     seed = s
 
-def rand(mask: int = 0xFFFFFFFF):
+def rand_my(mask: int = RAND_MAX):
     global seed
-    seed = (seed * RAND_MULTIPLIER + RAND_INCREMENT) & 0xFFFFFFFF
+    seed = (seed * RAND_MULTIPLIER + RAND_INCREMENT) & MAX_INT32
     return (seed >> 16) & mask
+
+srand = libc.srand if HAS_LIB else srand_my
+rand = libc.rand if HAS_LIB else rand_my
+
 
 # Constants
 Nk = 4

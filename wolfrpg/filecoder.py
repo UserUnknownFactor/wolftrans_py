@@ -38,9 +38,6 @@ class FileCoder(object):
         self.seed_indices = seed_indices
         self.crypt_header = crypt_header
         self.is_db = is_db
-
-        if this.USE_UTF8_STRINGS is None:
-            raise Exception("Please specify string encoding via filecoder.initialize()")
         self.is_utf8 = this.USE_UTF8_STRINGS
 
         if mode == 'r':
@@ -83,8 +80,11 @@ class FileCoder(object):
                 self.skip(25)
                 dec_data_size = self.read_u4()
                 enc_data_size = self.read_u4()
-                dec_data = self._lz4_unpack(self.read(enc_data_size), dec_data[len(header):])
+
+                from lz4.block import decompress
+                dec_data = decompress(self.read(enc_data_size), uncompressed_size=dec_data_size)
                 assert dec_data_size == len(dec_data), "lz4 unpacked wrong size"
+
                 self.io.close()
                 self.io = BytesIO(header + dec_data)
                 self.self_opened_io = False
@@ -229,7 +229,7 @@ class FileCoder(object):
             if DEBUG and final:
                 from .debuging import underline_differences
                 underline_differences(expected, have)
-            raise Exception(f"Verification failed: expected {expected}, got {actual}")
+            raise Exception(f"Verification failed: expected {expected}, got {have}")
         return True
 
     def skip(self, size):
@@ -340,11 +340,6 @@ class FileCoder(object):
 
     #########
     #   Other  #
-    def _lz4_unpack(packed, unpacked_size):
-        from lz4.block import decompress
-        unpacked = decompress(packed, uncompressed_size=unpacked_size)
-        return unpacked
-
     def calc_string_size(self, data):
         size = -1
         try:

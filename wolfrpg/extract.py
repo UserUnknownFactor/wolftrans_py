@@ -3,10 +3,12 @@ import sys, os, glob, re
 if sys.version_info < (3, 9): print("This app must run using Python 3.9+"), sys.exit(2)
 from wolfrpg import commands, maps, databases, gamedats, common_events, filecoder
 from wolfrpg.service_fn import write_csv_list, read_csv_dict, normalize_n, is_translatable
+from wolfrpg.wenums import EncodingType
 from wolfrpg import  yaml_dump
 import hashlib
 
 ENABLE_YAML_DUMPING = True
+MODE_BREAK_ON_EXCEPTIONS = False
 
 MODE_SETSTRING_AS_STRING = False
 MODE_CEARG_AS_STRING = False
@@ -176,8 +178,6 @@ def main():
     MODE_EXTRACT_CE_BY_NAME =  args.b
     MODE_EXTRACT_DATABASE_REFS = args.d
 
-    MODE_BREAK_ON_EXCEPTIONS = False
-
     """
     MODE_EXTRACT_CE_ARG_N = [] if not args.ea or args.ea == "0" else args.ea.split(',')
     MODE_EXTRACT_CE_EVID = [int(i.split('|')[1]) if len(i.split('|'))>1 else -1 for i in MODE_EXTRACT_CE_ARG_N if len(i.split('|'))>1]
@@ -187,7 +187,7 @@ def main():
     MODE_EXTRACT_CEBN_ARG_N = [int(i.split('|')[0]) for i in MODE_EXTRACT_CEBN_ARG_N]
     """
 
-    filecoder.initialize(args.u) # since we detect version == 3 at later stages of decoding we need to specify it beforehand
+    #filecoder.initialize(args.u) # since we may detect version 3 at later stages of decoding we need to specify it beforehand
 
     map_names = search_resource(os.getcwd(), "*.mps") if "maps" in args.f else [] # map data
     commonevents_name = search_resource(os.getcwd(), "CommonEvent.dat") if "common" in args.f else [] # common events
@@ -196,6 +196,39 @@ def main():
         os.getcwd(), "*.project"))) if "dbs" in args.f else [] # projects
 
     tags = []
+
+    if dat_name: 
+        dat_name = dat_name[0]
+        gamedat_failed = None
+        if MODE_BREAK_ON_EXCEPTIONS:
+            gd = gamedats.GameDat(dat_name)
+        else:
+            try:
+                gd = gamedats.GameDat(dat_name)
+            except Exception as e:
+                gamedat_failed = e
+        if gamedat_failed is None:
+            filecoder.initialize(gd.encoding_type == EncodingType.UNICODE)
+            if not os.path.isfile(make_postfixed_name(dat_name, STRINGS_DB_POSTFIX, ".dat")):
+                print("Extracting",os.path.basename(dat_name) +"...")
+                translatable = []
+                gds = gd.string_settings
+                if gds.title: translatable.append([gds.title, '', "TITLE"])
+                if gds.version: translatable.append([gds.version, '', "VERSION"])
+                if gds.font: translatable.append([gds.font, '', "FONT"])
+                if gds.subfonts: 
+                    translatable += [[font, '', f"SUBFONT{i}"] for i, font in enumerate(gds.subfonts)]
+                dat_name_only = remove_ext(os.path.basename(dat_name))
+                extract_previous(os.path.join(
+                    os.path.dirname(dat_name),
+                    dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+                write_csv_list(os.path.join(
+                    os.path.dirname(dat_name),
+                    dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
+        if gamedat_failed:
+            print(f"FAILED: {gamedat_failed}")
+    else:
+        filecoder.initialize(args.u)
 
     #maps_cache = dict()
     #map_names = []
@@ -303,24 +336,6 @@ def main():
         tags += search_tags(translatable)
         if ENABLE_YAML_DUMPING:
             yaml_dump.dump(db, remove_ext(db_name))
-
-    if len(dat_name): dat_name = dat_name[0]
-    if len(dat_name) and not os.path.isfile(make_postfixed_name(dat_name, STRINGS_DB_POSTFIX, ".dat")):
-        print("Extracting",os.path.basename(dat_name) +"...")
-        gd = gamedats.GameDat(dat_name)
-        translatable = []
-        gds = gd.string_settings
-        if gds.title: translatable.append([gds.title, '', "TITLE"])
-        if gds.version: translatable.append([gds.version, '', "VERSION"])
-        if gds.font: translatable.append([gds.font, '', "FONT"])
-        if gds.subfonts: translatable += [[font, '', f"SUBFONT{i}"] for i, font in enumerate(gds.subfonts) if font]
-        dat_name_only = remove_ext(os.path.basename(dat_name))
-        extract_previous(os.path.join(
-            os.path.dirname(dat_name),
-            dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
-        write_csv_list(os.path.join(
-            os.path.dirname(dat_name),
-            dat_name_only + ".dat" + ATTRIBUTES_DB_POSTFIX), translatable)
 
     tags = [[t, f"{tag_hash(t)};"] for i, t in enumerate(set(tags))]
     tags = sorted(tags, reverse=True, key=lambda x: len(x[0]))

@@ -1,12 +1,12 @@
 ﻿# -*- coding: utf-8 -*-
 from .filecoder import FileCoder
+from .wenums import VersionFooter, EncodingType
+
 
 class Database():
     DAT_SEED_INDICES = [0, 3, 9]
-    DATABASE_MAGIC2 = b'W\x00\x00OL\x00FM\x00\xc1'
-    DATABASE_MAGIC_CDB = b'W\x00\x00OLUFM\x00\xc2'
-    DATABASE_MAGIC_G = b'W\x00\x00OL\x00FMU'
-    UTF8 = False
+    DATABASE_MAGIC = b'W\0\0OL'
+    DATABASE_MAGIC_NEXT = b'FM\0'
 
     def __init__(self, project_filename, dat_filename):
         with FileCoder.open(project_filename, 'r') as coder:
@@ -19,19 +19,12 @@ class Database():
                 self.unknown_encrypted_1 = coder.read_u1()
             else:
                 self.crypt_header = None
-                try:
-                    coder.verify(self.DATABASE_MAGIC2)
-                    self.DATABASE_MAGIC = self.DATABASE_MAGIC2
-                    UTF8 = False
-                except:
-                    try:
-                        coder.verify(self.DATABASE_MAGIC_CDB)
-                        self.DATABASE_MAGIC = self.DATABASE_MAGIC_CDB
-                        UTF8 = True
-                    except:
-                        coder.verify(self.DATABASE_MAGIC_G)
-                        self.DATABASE_MAGIC = self.DATABASE_MAGIC_G
-                        UTF8 = True
+
+                coder.verify(self.DATABASE_MAGIC)
+                self.encoding_type = coder.read_u1() # 85 ('U') for 3+
+                coder.is_utf8 = EncodingType(self.encoding_type) == EncodingType.UNICODE
+                coder.verify(self.DATABASE_MAGIC_NEXT)
+                self.engine_version = coder.read_u1()
 
             num_types = coder.read_u4()
             if num_types != len(self.types):
@@ -40,8 +33,10 @@ class Database():
 
             [t.read_dat(coder) for t in self.types]
             self.last_terminator = coder.read_u1()
-            if self.last_terminator != 0xC1 and self.last_terminator != 0xC2: # 193
-                print(f"warning: no C1|C2 terminator at the of '#{dat_filename}', got {hex(self.last_terminator)} instead")
+            try:
+                VersionFooter(self.last_terminator)
+            except ValueError:
+                print(f"warning: terminator {self.last_terminator:X} at the end of '#{dat_filename}' is unknown")
 
     @property
     def encrypted(self):
@@ -57,6 +52,9 @@ class Database():
                 coder.write_u1(self.unknown_encrypted_1)
             else:
                 coder.write(self.DATABASE_MAGIC)
+                coder.write_u1(self.encoding_type)
+                coder.write(self.DATABASE_MAGIC_NEXT)
+                coder.write_u1(self.engine_version)
 
             coder.write_u4(len(self.types))
             [t.write_dat(coder) for t in self.types]
@@ -185,6 +183,7 @@ class Database():
             coder.write_u4(len(self.data))
             for datum in self.data:
                 datum.write_dat(coder)
+
 
     class Field():
         STRING_START = 0x07D0

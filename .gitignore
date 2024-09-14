@@ -3,6 +3,7 @@ replacement_tags.csv
 translation_out
 Data
 .vscode
-/build
-/*.egg-info
+.backup
+build
+*.egg-info
 *.ksy

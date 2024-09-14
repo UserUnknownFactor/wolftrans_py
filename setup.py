@@ -19,7 +19,7 @@ with open(path.join(this_directory, 'requirements.txt')) as f: requirements = f.
 
 setup(
     name='wolftrans',
-    version='0.3.0',
+    version='0.4.0',
     url='https://github.com/UserUnknownFactor/wolftrans_py',
     license='MIT',
     author='UserUnknownFactor',
@@ -32,8 +32,9 @@ setup(
         'Intended Audience :: Other Audience',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
         'Topic :: Games/Entertainment',
     ],
     packages = find_packages(),

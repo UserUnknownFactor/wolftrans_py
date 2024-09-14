@@ -3,6 +3,7 @@ from .filecoder import FileCoder
 from .common_events import CommonEvents
 from .route import RouteCommand
 from .commands import Command
+from wolfrpg.wenums import EncodingType
 from .debuging import *
 import os#, io#, re
 
@@ -20,8 +21,8 @@ class Map():
             except:
                 raise
 
-            self.is_unicode = coder.read_u4() == 85 # 'U' is UTF-8
-            coder.is_utf8 = self.is_unicode
+            self.encoding_type = coder.read_u4()
+            coder.is_utf8 = EncodingType(self.encoding_type) == EncodingType.UNICODE
 
             self.attributes = coder.read_u4() # 100
             self.version = coder.read_u1() # 100, 101, 102 etc
@@ -36,7 +37,7 @@ class Map():
 
             event_count = coder.read_u4()
             self.no_tiles = False
-            if self.is_unicode:
+            if self.encoding_type:
                 v = coder.read_u4()
                 if v == 0xFFFFFFFF: # -1
                     self.no_tiles = True
@@ -71,7 +72,7 @@ class Map():
     def write(self, filename):
         with FileCoder.open(filename, 'w') as coder:
             coder.write(self.MAP_MAGIC)
-            coder.write_u4(85 if self.is_unicode else 0) # Write 'U' if is_unicode
+            coder.write_u4(self.encoding_type)
             coder.write_u4(self.attributes)
             coder.write_u1(self.version)
             coder.write_string(self.unknown_str)
@@ -82,7 +83,7 @@ class Map():
             coder.write_u4(self.height)
             coder.write_u4(len(self.events))
 
-            if self.is_unicode:
+            if self.encoding_type:
                 if self.no_tiles:
                     coder.write_u4(0xffffffff)
 

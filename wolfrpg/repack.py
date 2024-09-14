@@ -2,6 +2,7 @@
 import sys, os
 if sys.version_info < (3, 9): print("This app must run using Python 3.9+"), sys.exit(2)
 from wolfrpg import commands, maps, databases, gamedats, common_events, filecoder
+from wolfrpg.wenums import Language
 from wolfrpg import yaml_dump
 from wolfrpg.service_fn import *
 from wolfrpg.simple_trie import *
@@ -372,6 +373,10 @@ def main():
                 except Exception as e:
                     print("Skipping", db_name, "due to error:\n", e,"\n")
                     sys.exit(1)
+
+            # NOTE: since we are translating set system language as English
+            #gd.byte_settings.in_game_language = Language.ENGLISH
+            #gd.byte_settings.system_language = Language.ENGLISH
 
             gds = gd.string_settings
             for line in strs:
